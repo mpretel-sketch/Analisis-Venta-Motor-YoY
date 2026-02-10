@@ -140,7 +140,7 @@ export default function App() {
 
   const bubbleRadius = (value) => {
     const v = Math.max(0, Number(value || 0));
-    return 4 + 20 * Math.sqrt(v / maxCountryValue);
+    return 6 + 22 * Math.sqrt(v / maxCountryValue);
   };
 
   const bubbleColor = (value) => {
@@ -1161,7 +1161,7 @@ export default function App() {
                 </div>
               </div>
               <div className="map-wrap">
-                <ComposableMap projectionConfig={{ scale: 145 }}>
+                <ComposableMap width={900} height={460} projection="geoMercator" projectionConfig={{ scale: 185 }}>
                   <Geographies geography={geoUrl}>
                     {({ geographies }) => (
                       <>
@@ -1194,9 +1194,9 @@ export default function App() {
                               <circle
                                 r={radius}
                                 fill={bubbleColor(row.VarPct)}
-                                fillOpacity={0.55}
-                                stroke="#2a2f32"
-                                strokeWidth={0.6}
+                                fillOpacity={0.7}
+                                stroke="#1f2326"
+                                strokeWidth={0.8}
                               >
                                 <title>
                                   {`${row.Country} | ${currency(row.Curr)} | YoY ${percent(row.VarPct)}`}
