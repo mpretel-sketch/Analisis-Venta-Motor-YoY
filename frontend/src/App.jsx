@@ -5,10 +5,13 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  Cell,
 } from "recharts";
 
 const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/\$/, "");
@@ -171,6 +174,28 @@ export default function App() {
     const v = Math.max(0, Math.min(100, value));
     const alpha = v / 100;
     return `rgba(201, 75, 42, ${0.15 + alpha * 0.55})`;
+  };
+
+  const pieColors = [
+    "#516BA6",
+    "#0f6b6e",
+    "#c94b2a",
+    "#7a5c3e",
+    "#3f4a5a",
+    "#9c6d4e",
+    "#8aa0a6",
+    "#bfa27a",
+  ];
+
+  const buildPieData = (rows, keyName) => {
+    const list = (rows || [])
+      .map((row) => ({
+        name: row[keyName],
+        value: Number(row.Curr || 0),
+      }))
+      .filter((row) => row.name);
+    list.sort((a, b) => b.value - a.value);
+    return list.slice(0, 8);
   };
 
   const Sparkline = ({ data, metric }) => {
@@ -1193,6 +1218,57 @@ export default function App() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h3>Distribución por ubicación y país</h3>
+                <p className="muted">Quesitos por facturación actual.</p>
+              </div>
+            </div>
+            <div className="grid">
+              <div className="chart">
+                <h4>Ubicación</h4>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={buildPieData(data.tables.locations, "Ubicacion")}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={55}
+                      outerRadius={95}
+                      paddingAngle={2}
+                    >
+                      {buildPieData(data.tables.locations, "Ubicacion").map((entry, idx) => (
+                        <Cell key={`loc-${idx}`} fill={pieColors[idx % pieColors.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v) => currency(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="chart">
+                <h4>País</h4>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={buildPieData(data.clusters?.byCountry || [], "Country")}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={55}
+                      outerRadius={95}
+                      paddingAngle={2}
+                    >
+                      {buildPieData(data.clusters?.byCountry || [], "Country").map((entry, idx) => (
+                        <Cell key={`country-${idx}`} fill={pieColors[idx % pieColors.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v) => currency(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </section>
 
