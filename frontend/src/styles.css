@@ -258,6 +258,14 @@ th {
   color: var(--muted);
 }
 
+.row-clickable {
+  cursor: pointer;
+}
+
+.row-clickable:hover {
+  background: rgba(81, 107, 166, 0.08);
+}
+
 .chart {
   background: #faf5ee;
   border-radius: 18px;

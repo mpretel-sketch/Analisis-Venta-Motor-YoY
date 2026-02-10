@@ -25,7 +25,7 @@ const percent = (value) =>
     ? "—"
     : `${value.toFixed(1)}%`;
 
-const Table = ({ title, rows, columns, limit = 10 }) => {
+const Table = ({ title, rows, columns, limit = 10, onRowClick }) => {
   const [expanded, setExpanded] = useState(false);
   if (!rows?.length) {
     return (
@@ -63,7 +63,11 @@ const Table = ({ title, rows, columns, limit = 10 }) => {
           </thead>
           <tbody>
             {shown.map((row, idx) => (
-              <tr key={`${row.Cliente}-${idx}`}>
+              <tr
+                key={`${row.Cliente}-${idx}`}
+                className={onRowClick ? "row-clickable" : undefined}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+              >
                 {columns.map((col) => (
                   <td key={col.key}>{col.render(row)}</td>
                 ))}
@@ -100,6 +104,19 @@ export default function App() {
   const [showTopImpact, setShowTopImpact] = useState(true);
   const [showSmartAlerts, setShowSmartAlerts] = useState(true);
   const [compareEnabled, setCompareEnabled] = useState(false);
+
+  const applyFiltersAndReload = (next) => {
+    if (Object.prototype.hasOwnProperty.call(next, "search")) {
+      setSearch(next.search);
+    }
+    if (Object.prototype.hasOwnProperty.call(next, "location")) {
+      setLocation(next.location);
+    }
+    if (!file) {
+      setTimeout(() => submitNetSuiteAnalysis(), 0);
+    }
+  };
+
 
   const columnDefs = useMemo(() => {
     if (!data?.meta) return [];
@@ -1004,7 +1021,11 @@ export default function App() {
                       </thead>
                       <tbody>
                         {(data.intelligentAlerts?.persistent ?? []).slice(0, 10).map((row, idx) => (
-                          <tr key={`${row.Cliente}-${idx}`}>
+                          <tr
+                            key={`${row.Cliente}-${idx}`}
+                            className="row-clickable"
+                            onClick={() => applyFiltersAndReload({ search: row.Cliente })}
+                          >
                             <td>{row.Cliente}</td>
                             <td>{row.Ubicacion ?? "—"}</td>
                             <td>{percent(row.VarPctLast)}</td>
@@ -1029,7 +1050,11 @@ export default function App() {
                       </thead>
                       <tbody>
                         {(data.intelligentAlerts?.recovery ?? []).slice(0, 10).map((row, idx) => (
-                          <tr key={`${row.Cliente}-${idx}`}>
+                          <tr
+                            key={`${row.Cliente}-${idx}`}
+                            className="row-clickable"
+                            onClick={() => applyFiltersAndReload({ search: row.Cliente })}
+                          >
                             <td>{row.Cliente}</td>
                             <td>{row.Ubicacion ?? "—"}</td>
                             <td>{percent(row.VarPctLast)}</td>
@@ -1045,13 +1070,13 @@ export default function App() {
           </section>
 
           <div className="grid">
-            <Table title="Alertas" rows={data.tables.alerts} columns={columnDefs} />
-            <Table title="Crecimientos" rows={data.tables.growth} columns={columnDefs} />
+            <Table title="Alertas" rows={data.tables.alerts} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
+            <Table title="Crecimientos" rows={data.tables.growth} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
           </div>
 
           <div className="grid">
-            <Table title="Hoteles nuevos" rows={data.tables.new} columns={columnDefs} />
-            <Table title="Hoteles perdidos" rows={data.tables.lost} columns={columnDefs} />
+            <Table title="Hoteles nuevos" rows={data.tables.new} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
+            <Table title="Hoteles perdidos" rows={data.tables.lost} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
           </div>
 
           <section className="panel">
@@ -1072,6 +1097,7 @@ export default function App() {
                   { key: 'VarAbs', label: 'Variación €', render: (row) => currency(row.VarAbs) },
                   { key: 'VarPct', label: 'Variación %', render: (row) => percent(row.VarPct) },
                 ]}
+                onRowClick={(row) => applyFiltersAndReload({ search: row.Cluster })}
               />
               {data.clusters?.byCountry?.length > 0 && (
                 <Table
@@ -1091,6 +1117,7 @@ export default function App() {
               title="Por área comercial"
               rows={data.clusters?.byArea || []}
               columns={locationColumns}
+              onRowClick={(row) => applyFiltersAndReload({ location: row.Ubicacion, search: "" })}
             />
           </section>
 
@@ -1109,6 +1136,7 @@ export default function App() {
                 { key: 'Ubicacion', label: 'Ubicación', render: (row) => row.Ubicacion ?? '—' },
                 { key: 'MonthsInactive', label: 'Meses sin ventas', render: (row) => row.MonthsInactive },
               ]}
+              onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })}
             />
           </section>
 
@@ -1167,6 +1195,7 @@ export default function App() {
             title="Análisis por ubicación"
             rows={data.tables.locations}
             columns={locationColumns}
+            onRowClick={(row) => applyFiltersAndReload({ location: row.Ubicacion, search: "" })}
           />
         </main>
       )}
