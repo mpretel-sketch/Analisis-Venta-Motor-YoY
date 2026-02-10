@@ -1,0 +1,1173 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+const currency = (value) =>
+  new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(value ?? 0);
+
+const percent = (value) =>
+  value === null || value === undefined
+    ? "—"
+    : `${value.toFixed(1)}%`;
+
+const Table = ({ title, rows, columns, limit = 10 }) => {
+  const [expanded, setExpanded] = useState(false);
+  if (!rows?.length) {
+    return (
+      <section className="panel">
+        <h3>{title}</h3>
+        <p className="muted">Sin registros.</p>
+      </section>
+    );
+  }
+
+  const shown = expanded ? rows : rows.slice(0, limit);
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>{title}</h3>
+        {rows.length > limit && (
+          <button
+            type="button"
+            className="ghost small"
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            {expanded ? "Mostrar menos" : `Mostrar todo (${rows.length})`}
+          </button>
+        )}
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {columns.map((col) => (
+                <th key={col.key}>{col.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((row, idx) => (
+              <tr key={`${row.Cliente}-${idx}`}>
+                {columns.map((col) => (
+                  <td key={col.key}>{col.render(row)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+};
+
+export default function App() {
+  const [file, setFile] = useState(null);
+  const [threshold, setThreshold] = useState(-30);
+  const [mode, setMode] = useState("month");
+  const [monthKey, setMonthKey] = useState(null);
+  const [compareMode, setCompareMode] = useState("month");
+  const [compareMonthKey, setCompareMonthKey] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [location, setLocation] = useState("all");
+  const [impactMin, setImpactMin] = useState("");
+  const [impactMax, setImpactMax] = useState("");
+  const [varMin, setVarMin] = useState("");
+  const [varMax, setVarMax] = useState("");
+  const [persistThreshold, setPersistThreshold] = useState(-30);
+  const [recoveryThreshold, setRecoveryThreshold] = useState(0);
+  const [churnMonths, setChurnMonths] = useState(9);
+  const [cohortMetric, setCohortMetric] = useState("active");
+  const [showCharts, setShowCharts] = useState(true);
+  const [showTopImpact, setShowTopImpact] = useState(true);
+  const [showSmartAlerts, setShowSmartAlerts] = useState(true);
+  const [compareEnabled, setCompareEnabled] = useState(false);
+
+  const columnDefs = useMemo(() => {
+    if (!data?.meta) return [];
+    return [
+      {
+        key: "Cliente",
+        label: "Hotel",
+        render: (row) => row.Cliente,
+      },
+      {
+        key: "HotelCode",
+        label: "Code",
+        render: (row) => row.HotelCode ?? "—",
+      },
+      {
+        key: "Ubicacion",
+        label: "Ubicación",
+        render: (row) => row.Ubicacion ?? "—",
+      },
+      {
+        key: "Prev",
+        label: data.meta.previousLabel,
+        render: (row) => currency(row.Prev),
+      },
+      {
+        key: "Curr",
+        label: data.meta.latestLabel,
+        render: (row) => currency(row.Curr),
+      },
+      {
+        key: "VarAbs",
+        label: "Variación €",
+        render: (row) => currency(row.VarAbs),
+      },
+      {
+        key: "VarPct",
+        label: "Variación %",
+        render: (row) => percent(row.VarPct),
+      },
+    ];
+  }, [data]);
+
+  const locationColumns = [
+    { key: "Ubicacion", label: "Ubicación", render: (row) => row.Ubicacion },
+    { key: "Prev", label: "Prev", render: (row) => currency(row.Prev) },
+    { key: "Curr", label: "Curr", render: (row) => currency(row.Curr) },
+    { key: "VarAbs", label: "Variación €", render: (row) => currency(row.VarAbs) },
+    { key: "VarPct", label: "Variación %", render: (row) => percent(row.VarPct) },
+  ];
+
+  const heatColor = (value) => {
+    if (value === null || value === undefined) return "transparent";
+    const v = Math.max(0, Math.min(100, value));
+    const alpha = v / 100;
+    return `rgba(201, 75, 42, ${0.15 + alpha * 0.55})`;
+  };
+
+  const Sparkline = ({ data, metric }) => {
+    if (!data?.length) return <span className="muted">—</span>;
+    const key = metric === "pct" ? "varPct" : "curr";
+    return (
+      <div className="sparkline">
+        <ResponsiveContainer width="100%" height={60}>
+          <LineChart data={data}>
+            <Line
+              type="monotone"
+              dataKey={key}
+              stroke={metric === "pct" ? "#c94b2a" : "#0f6b6e"}
+              strokeWidth={2}
+              dot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  };
+
+  const locations = useMemo(() => {
+    if (!data) return [];
+    const set = new Set();
+    ["alerts", "growth", "new", "lost"].forEach((key) => {
+      data.tables?.[key]?.forEach((row) => {
+        if (row.Ubicacion) set.add(row.Ubicacion);
+      });
+    });
+    data.tables?.locations?.forEach((row) => {
+      if (row.Ubicacion) set.add(row.Ubicacion);
+    });
+    return Array.from(set).sort();
+  }, [data]);
+
+  useEffect(() => {
+    if (data?.meta?.monthKey && !monthKey) {
+      setMonthKey(data.meta.monthKey);
+    }
+  }, [data, monthKey]);
+
+  useEffect(() => {
+    if (data?.meta?.monthKey && !compareMonthKey) {
+      setCompareMonthKey(data.meta.monthKey);
+    }
+  }, [data, compareMonthKey]);
+
+  const submitAnalysis = async (event) => {
+    if (event?.preventDefault) event.preventDefault();
+    if (!file) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("alert_threshold", threshold);
+      formData.append("mode", mode);
+      if (monthKey) formData.append("month_key", monthKey);
+      if (compareEnabled && !isSameComparator && compareMode) {
+        formData.append("compare_mode", compareMode);
+      }
+      if (compareEnabled && !isSameComparator && compareMonthKey) {
+        formData.append("compare_month_key", compareMonthKey);
+      }
+      if (search) formData.append("search", search);
+      if (location) formData.append("location", location);
+      if (impactMin !== "") formData.append("impact_min", impactMin);
+      if (impactMax !== "") formData.append("impact_max", impactMax);
+      if (varMin !== "") formData.append("var_min", varMin);
+      if (varMax !== "") formData.append("var_max", varMax);
+      formData.append("persist_threshold", persistThreshold);
+      formData.append("recovery_threshold", recoveryThreshold);
+      formData.append("churn_months", churnMonths);
+      formData.append("churn_months", churnMonths);
+
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let message = "Error al analizar el archivo.";
+        try {
+          const err = await response.json();
+          message = err.detail || message;
+        } catch {
+          const text = await response.text();
+          if (text) message = text;
+        }
+        throw new Error(message);
+      }
+
+      let json;
+      try {
+        json = await response.json();
+      } catch {
+        throw new Error("Respuesta inválida del servidor.");
+      }
+      setData(json);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAnalyze = (event) => submitAnalysis(event);
+
+  const submitNetSuiteAnalysis = async (event) => {
+    if (event?.preventDefault) event.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("alert_threshold", threshold);
+      formData.append("mode", mode);
+      if (monthKey) formData.append("month_key", monthKey);
+      if (compareEnabled && !isSameComparator && compareMode) {
+        formData.append("compare_mode", compareMode);
+      }
+      if (compareEnabled && !isSameComparator && compareMonthKey) {
+        formData.append("compare_month_key", compareMonthKey);
+      }
+      if (search) formData.append("search", search);
+      if (location) formData.append("location", location);
+      if (impactMin !== "") formData.append("impact_min", impactMin);
+      if (impactMax !== "") formData.append("impact_max", impactMax);
+      if (varMin !== "") formData.append("var_min", varMin);
+      if (varMax !== "") formData.append("var_max", varMax);
+      formData.append("persist_threshold", persistThreshold);
+      formData.append("recovery_threshold", recoveryThreshold);
+
+      const response = await fetch("/api/analyze/netsuite", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let message = "Error al analizar desde NetSuite.";
+        try {
+          const err = await response.json();
+          message = err.detail || message;
+        } catch {
+          const text = await response.text();
+          if (text) message = text;
+        }
+        throw new Error(message);
+      }
+
+      let json;
+      try {
+        json = await response.json();
+      } catch {
+        throw new Error("Respuesta inválida del servidor.");
+      }
+      setData(json);
+      // Limpiar el archivo actual ya que ahora estamos usando NetSuite
+      setFile(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!data || !file) return;
+    const timer = setTimeout(() => {
+      submitAnalysis();
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [search, location, impactMin, impactMax, varMin, varMax, persistThreshold, recoveryThreshold, churnMonths]);
+
+  const handleDownload = async () => {
+    if (!file) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("alert_threshold", threshold);
+      formData.append("mode", mode);
+      if (monthKey) formData.append("month_key", monthKey);
+      if (search) formData.append("search", search);
+      if (location) formData.append("location", location);
+      if (impactMin !== "") formData.append("impact_min", impactMin);
+      if (impactMax !== "") formData.append("impact_max", impactMax);
+      if (varMin !== "") formData.append("var_min", varMin);
+      if (varMax !== "") formData.append("var_max", varMax);
+      formData.append("persist_threshold", persistThreshold);
+      formData.append("recovery_threshold", recoveryThreshold);
+      if (compareEnabled && data?.compare && !isSameComparator) {
+        const exportModes = [
+          { mode, monthKey, label: "Principal" },
+          { mode: compareMode, monthKey: compareMonthKey, label: "Comparador" },
+        ];
+        formData.append("export_modes", JSON.stringify(exportModes));
+      }
+
+      const response = await fetch("/api/report/excel", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let message = "Error al generar el Excel.";
+        try {
+          const err = await response.json();
+          message = err.detail || message;
+        } catch {
+          const text = await response.text();
+          if (text) message = text;
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Early_Warning_YoY.xlsx";
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!file) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("alert_threshold", threshold);
+      formData.append("mode", mode);
+      if (monthKey) formData.append("month_key", monthKey);
+      if (search) formData.append("search", search);
+      if (location) formData.append("location", location);
+      if (impactMin !== "") formData.append("impact_min", impactMin);
+      if (impactMax !== "") formData.append("impact_max", impactMax);
+      if (varMin !== "") formData.append("var_min", varMin);
+      if (varMax !== "") formData.append("var_max", varMax);
+      formData.append("persist_threshold", persistThreshold);
+      formData.append("recovery_threshold", recoveryThreshold);
+      formData.append("churn_months", churnMonths);
+
+      const response = await fetch("/api/report/pdf", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let message = "Error al generar el PDF.";
+        try {
+          const err = await response.json();
+          message = err.detail || message;
+        } catch {
+          const text = await response.text();
+          if (text) message = text;
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Executive_YoY_Report.pdf";
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isSameComparator =
+    data &&
+    compareMode === data.meta?.mode &&
+    (compareMonthKey || "") === (data.meta?.monthKey || "");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("early_warning_prefs");
+    if (!saved) return;
+    try {
+      const prefs = JSON.parse(saved);
+      if (prefs.mode) setMode(prefs.mode);
+      if (prefs.monthKey) setMonthKey(prefs.monthKey);
+      if (prefs.compareMode) setCompareMode(prefs.compareMode);
+      if (prefs.compareMonthKey) setCompareMonthKey(prefs.compareMonthKey);
+      if (prefs.threshold !== undefined) setThreshold(prefs.threshold);
+      if (prefs.persistThreshold !== undefined) setPersistThreshold(prefs.persistThreshold);
+      if (prefs.recoveryThreshold !== undefined) setRecoveryThreshold(prefs.recoveryThreshold);
+      if (prefs.compareEnabled !== undefined) setCompareEnabled(prefs.compareEnabled);
+      if (prefs.search !== undefined) setSearch(prefs.search);
+      if (prefs.location !== undefined) setLocation(prefs.location);
+      if (prefs.impactMin !== undefined) setImpactMin(prefs.impactMin);
+      if (prefs.impactMax !== undefined) setImpactMax(prefs.impactMax);
+      if (prefs.varMin !== undefined) setVarMin(prefs.varMin);
+      if (prefs.varMax !== undefined) setVarMax(prefs.varMax);
+    } catch {
+      // ignore bad prefs
+    }
+  }, []);
+
+  useEffect(() => {
+    const prefs = {
+      mode,
+      monthKey,
+      compareMode,
+      compareMonthKey,
+      compareEnabled,
+      threshold,
+      persistThreshold,
+      recoveryThreshold,
+      churnMonths,
+      cohortMetric,
+      search,
+      location,
+      impactMin,
+      impactMax,
+      varMin,
+      varMax,
+    };
+    localStorage.setItem("early_warning_prefs", JSON.stringify(prefs));
+  }, [
+    mode,
+    monthKey,
+    compareMode,
+    compareMonthKey,
+    compareEnabled,
+    threshold,
+    persistThreshold,
+    recoveryThreshold,
+    churnMonths,
+    cohortMetric,
+    search,
+    location,
+    impactMin,
+    impactMax,
+    varMin,
+    varMax,
+  ]);
+
+  return (
+    <div className="app">
+      <header className="hero">
+        <div>
+          <p className="eyebrow">Early Warning System</p>
+          <h1>Executive YoY BE Control</h1>
+          <p className="lead">
+            Sube tu Excel y detecta caídas, crecimientos, hoteles nuevos y perdidos con un
+            resumen listo para imprimir.
+          </p>
+        </div>
+        <div className="hero-card">
+          <form onSubmit={handleAnalyze}>
+            <label className="file">
+              <span>Archivo Excel (.xls o .xlsx)</span>
+              <input
+                type="file"
+                accept=".xls,.xlsx"
+                onChange={(e) => setFile(e.target.files[0])}
+              />
+              <span className="file-name">
+                {file ? file.name : "Selecciona un archivo"}
+              </span>
+            </label>
+            <label className="threshold">
+              <span>
+                Modo de análisis{" "}
+                <span
+                  className="help"
+                  title="Mes: compara un mes con su mismo mes del año anterior. YTD: enero-hasta el mes elegido vs año anterior. Rolling: últimos 3/6 meses vs mismos meses del año anterior."
+                >
+                  ?
+                </span>
+              </span>
+              <select value={mode} onChange={(e) => setMode(e.target.value)}>
+                <option value="month">Último mes</option>
+                <option value="ytd">YTD (año a la fecha)</option>
+                <option value="rolling3">Rolling 3 meses</option>
+                <option value="rolling6">Rolling 6 meses</option>
+              </select>
+            </label>
+            <label className="threshold">
+              <span>Mes de referencia</span>
+              <select
+                value={monthKey ?? ""}
+                onChange={(e) => setMonthKey(e.target.value || null)}
+                disabled={!data?.meta?.availableMonths?.length}
+              >
+                {!data?.meta?.availableMonths?.length && (
+                  <option value="">Analiza primero</option>
+                )}
+                {data?.meta?.availableMonths?.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="threshold">
+              <span>
+                Comparador: modo{" "}
+                <span
+                  className="help"
+                  title="El comparador sirve para contrastar otro periodo (modo/mes) con el principal."
+                >
+                  ?
+                </span>
+              </span>
+              <select value={compareMode} onChange={(e) => setCompareMode(e.target.value)}>
+                <option value="month">Último mes</option>
+                <option value="ytd">YTD (año a la fecha)</option>
+                <option value="rolling3">Rolling 3 meses</option>
+                <option value="rolling6">Rolling 6 meses</option>
+              </select>
+            </label>
+            <label className="threshold">
+              <span>Comparador: mes</span>
+              <select
+                value={compareMonthKey ?? ""}
+                onChange={(e) => setCompareMonthKey(e.target.value || null)}
+                disabled={!data?.meta?.availableMonths?.length}
+              >
+                {!data?.meta?.availableMonths?.length && (
+                  <option value="">Analiza primero</option>
+                )}
+                {data?.meta?.availableMonths?.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="threshold">
+              <span>Activar comparador</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={compareEnabled}
+                  onChange={(e) => setCompareEnabled(e.target.checked)}
+                />
+                <span className="toggle-track" />
+              </label>
+            </label>
+            {isSameComparator && (
+              <p className="warning">
+                El comparador coincide con el periodo principal. Cambia modo o mes para activarlo.
+              </p>
+            )}
+            <label className="threshold">
+              <span>Umbral de alerta (%)</span>
+              <input
+                type="number"
+                value={threshold}
+                onChange={(e) => setThreshold(Number(e.target.value))}
+              />
+            </label>
+            <div className="actions">
+              <button type="submit" disabled={!file || loading}>
+                {loading ? "Analizando..." : "Analizar"}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={submitNetSuiteAnalysis}
+                disabled={loading}
+                title="Obtener datos directamente desde NetSuite"
+              >
+                📡 Analizar desde NetSuite
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={handleDownload}
+                disabled={!file || loading}
+              >
+                Descargar Excel
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={handleDownloadPdf}
+                disabled={!file || loading}
+              >
+                Descargar PDF
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => window.print()}
+                disabled={!data}
+              >
+                Imprimir
+              </button>
+            </div>
+          </form>
+          {error && <p className="error">{error}</p>}
+        </div>
+      </header>
+
+      {data && (
+        <main className="content">
+          <section className="panel filters">
+            <div className="panel-head">
+              <h3>Filtros</h3>
+              <button
+                type="button"
+                className="ghost small"
+                onClick={() => {
+                  setSearch("");
+                  setLocation("all");
+                  setImpactMin("");
+                  setImpactMax("");
+                  setVarMin("");
+                  setVarMax("");
+                }}
+              >
+                Limpiar filtros
+              </button>
+            </div>
+            <div className="filter-grid">
+              <label>
+                <span>Búsqueda hotel / code</span>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Ej: Melia, BCN..."
+                />
+              </label>
+              <label>
+                <span>Ubicación</span>
+                <select value={location} onChange={(e) => setLocation(e.target.value)}>
+                  <option value="all">Todas</option>
+                  {locations.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Impacto € mínimo</span>
+                <input
+                  type="number"
+                  value={impactMin}
+                  onChange={(e) => setImpactMin(e.target.value)}
+                  placeholder="0"
+                />
+              </label>
+              <label>
+                <span>Impacto € máximo</span>
+                <input
+                  type="number"
+                  value={impactMax}
+                  onChange={(e) => setImpactMax(e.target.value)}
+                  placeholder="100000"
+                />
+              </label>
+              <label>
+                <span>Variación % mínima</span>
+                <input
+                  type="number"
+                  value={varMin}
+                  onChange={(e) => setVarMin(e.target.value)}
+                  placeholder="-50"
+                />
+              </label>
+              <label>
+                <span>Variación % máxima</span>
+                <input
+                  type="number"
+                  value={varMax}
+                  onChange={(e) => setVarMax(e.target.value)}
+                  placeholder="50"
+                />
+              </label>
+              <label>
+                <span>Alerta persistente (%)</span>
+                <input
+                  type="number"
+                  value={persistThreshold}
+                  onChange={(e) => setPersistThreshold(Number(e.target.value))}
+                  placeholder="-30"
+                />
+              </label>
+              <label>
+                <span>Recuperación desde (%)</span>
+                <input
+                  type="number"
+                  value={recoveryThreshold}
+                  onChange={(e) => setRecoveryThreshold(Number(e.target.value))}
+                  placeholder="0"
+                />
+              </label>
+              <label>
+                <span>Churn (meses sin ventas)</span>
+                <select value={churnMonths} onChange={(e) => setChurnMonths(Number(e.target.value))}>
+                  <option value="6">6</option>
+                  <option value="9">9</option>
+                  <option value="12">12</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section className="panel summary">
+            <div>
+              <p className="muted">Comparativa principal</p>
+              <h2>{data.meta.periodLabel || data.meta.pairLabel}</h2>
+              <p className="tag">{data.meta.mode?.toUpperCase()} · {data.meta.monthKey}</p>
+            </div>
+            <div className="summary-grid">
+              <div>
+                <span>Facturación año anterior</span>
+                <strong>{currency(data.summary.totalPrev)}</strong>
+              </div>
+              <div>
+                <span>Facturación año actual</span>
+                <strong>{currency(data.summary.totalCurr)}</strong>
+              </div>
+              <div>
+                <span>Variación absoluta</span>
+                <strong>{currency(data.summary.totalVar)}</strong>
+              </div>
+              <div>
+                <span>Variación %</span>
+                <strong>{percent(data.summary.totalVarPct)}</strong>
+              </div>
+              <div>
+                <span>Alertas</span>
+                <strong>{data.summary.alertsCount}</strong>
+                <small>{currency(data.summary.alertsImpact)} impacto</small>
+              </div>
+              <div>
+                <span>Crecimientos</span>
+                <strong>{data.summary.growthCount}</strong>
+                <small>{currency(data.summary.growthImpact)} impacto</small>
+              </div>
+              <div>
+                <span>Hoteles nuevos</span>
+                <strong>{data.summary.newCount}</strong>
+                <small>{currency(data.summary.newRevenue)} facturación</small>
+              </div>
+              <div>
+                <span>Hoteles perdidos</span>
+                <strong>{data.summary.lostCount}</strong>
+                <small>{currency(data.summary.lostRevenue)} perdida</small>
+              </div>
+            </div>
+          </section>
+
+          {compareEnabled && data.compare && !isSameComparator && (
+            <section className="panel summary">
+              <div>
+                <p className="muted">Comparador de periodos</p>
+                <h2>{data.compare.meta.periodLabel || data.compare.meta.pairLabel}</h2>
+                <p className="tag">{data.compare.meta.mode?.toUpperCase()} · {data.compare.meta.monthKey}</p>
+              </div>
+              <div className="summary-grid">
+                <div>
+                  <span>Facturación año anterior</span>
+                  <strong>{currency(data.compare.summary.totalPrev)}</strong>
+                </div>
+                <div>
+                  <span>Facturación año actual</span>
+                  <strong>{currency(data.compare.summary.totalCurr)}</strong>
+                </div>
+                <div>
+                  <span>Variación absoluta</span>
+                  <strong>{currency(data.compare.summary.totalVar)}</strong>
+                </div>
+                <div>
+                  <span>Variación %</span>
+                  <strong>{percent(data.compare.summary.totalVarPct)}</strong>
+                </div>
+                <div>
+                  <span>Alertas</span>
+                  <strong>{data.compare.summary.alertsCount}</strong>
+                  <small>{currency(data.compare.summary.alertsImpact)} impacto</small>
+                </div>
+                <div>
+                  <span>Crecimientos</span>
+                  <strong>{data.compare.summary.growthCount}</strong>
+                  <small>{currency(data.compare.summary.growthImpact)} impacto</small>
+                </div>
+                <div>
+                  <span>Hoteles nuevos</span>
+                  <strong>{data.compare.summary.newCount}</strong>
+                  <small>{currency(data.compare.summary.newRevenue)} facturación</small>
+                </div>
+                <div>
+                  <span>Hoteles perdidos</span>
+                  <strong>{data.compare.summary.lostCount}</strong>
+                  <small>{currency(data.compare.summary.lostRevenue)} perdida</small>
+                </div>
+              </div>
+            </section>
+          )}
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h3>Tendencia YoY total</h3>
+                <p className="muted">Variación % mensual con comparación YoY.</p>
+              </div>
+              <button
+                type="button"
+                className="ghost small"
+                onClick={() => setShowCharts((prev) => !prev)}
+              >
+                {showCharts ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+            {showCharts && (
+              <div className="chart">
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={data.series}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1e5d8" />
+                    <XAxis dataKey="label" />
+                    <YAxis tickFormatter={(v) => `${v}%`} />
+                    <Tooltip formatter={(v) => percent(v)} />
+                    <Line type="monotone" dataKey="varPct" stroke="#c94b2a" strokeWidth={3} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h3>Impacto Top 10</h3>
+                <p className="muted">Alertas y crecimientos más relevantes.</p>
+              </div>
+              <button
+                type="button"
+                className="ghost small"
+                onClick={() => setShowTopImpact((prev) => !prev)}
+              >
+                {showTopImpact ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+            {showTopImpact && (
+              <div className="grid">
+                <div className="chart">
+                  <h4>Alertas</h4>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart
+                      data={data.tables.alerts.slice(0, 10).map((row) => ({
+                        name: row.Cliente?.slice(0, 20) || "-",
+                        impact: Math.abs(row.VarAbs || 0),
+                      }))}
+                      layout="vertical"
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1e5d8" />
+                      <XAxis type="number" tickFormatter={(v) => currency(v)} />
+                      <YAxis type="category" dataKey="name" width={100} />
+                      <Tooltip formatter={(v) => currency(v)} />
+                      <Bar dataKey="impact" fill="#c94b2a" radius={[8, 8, 8, 8]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="spark-grid">
+                    {data.tables.alerts.slice(0, 10).map((row) => (
+                      <div key={row.Cliente} className="spark-row">
+                        <p className="spark-name">{row.Cliente}</p>
+                        <small className="muted">YoY %</small>
+                        <Sparkline data={data.hotelSeries?.alerts?.[row.Cliente]} metric="pct" />
+                        <small className="muted">Facturación</small>
+                        <Sparkline data={data.hotelSeries?.alerts?.[row.Cliente]} metric="curr" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="chart">
+                  <h4>Crecimientos</h4>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart
+                      data={data.tables.growth.slice(0, 10).map((row) => ({
+                        name: row.Cliente?.slice(0, 20) || "-",
+                        impact: row.VarAbs || 0,
+                      }))}
+                      layout="vertical"
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1e5d8" />
+                      <XAxis type="number" tickFormatter={(v) => currency(v)} />
+                      <YAxis type="category" dataKey="name" width={100} />
+                      <Tooltip formatter={(v) => currency(v)} />
+                      <Bar dataKey="impact" fill="#0f6b6e" radius={[8, 8, 8, 8]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="spark-grid">
+                    {data.tables.growth.slice(0, 10).map((row) => (
+                      <div key={row.Cliente} className="spark-row">
+                        <p className="spark-name">{row.Cliente}</p>
+                        <small className="muted">YoY %</small>
+                        <Sparkline data={data.hotelSeries?.growth?.[row.Cliente]} metric="pct" />
+                        <small className="muted">Facturación</small>
+                        <Sparkline data={data.hotelSeries?.growth?.[row.Cliente]} metric="curr" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h3>Alertas inteligentes</h3>
+                <p className="muted">Persistentes y recuperaciones detectadas automáticamente.</p>
+              </div>
+              <button
+                type="button"
+                className="ghost small"
+                onClick={() => setShowSmartAlerts((prev) => !prev)}
+              >
+                {showSmartAlerts ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+            {showSmartAlerts && (
+              <div className="grid">
+                <div className="chart">
+                  <h4>Persistentes (2 meses seguidos)</h4>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Hotel</th>
+                          <th>Ubicación</th>
+                          <th>Mes actual</th>
+                          <th>Mes previo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(data.intelligentAlerts?.persistent ?? []).slice(0, 10).map((row, idx) => (
+                          <tr key={`${row.Cliente}-${idx}`}>
+                            <td>{row.Cliente}</td>
+                            <td>{row.Ubicacion ?? "—"}</td>
+                            <td>{percent(row.VarPctLast)}</td>
+                            <td>{percent(row.VarPctPrev)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="chart">
+                  <h4>Recuperación</h4>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Hotel</th>
+                          <th>Ubicación</th>
+                          <th>Mes actual</th>
+                          <th>Mes previo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(data.intelligentAlerts?.recovery ?? []).slice(0, 10).map((row, idx) => (
+                          <tr key={`${row.Cliente}-${idx}`}>
+                            <td>{row.Cliente}</td>
+                            <td>{row.Ubicacion ?? "—"}</td>
+                            <td>{percent(row.VarPctLast)}</td>
+                            <td>{percent(row.VarPctPrev)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <div className="grid">
+            <Table title="Alertas" rows={data.tables.alerts} columns={columnDefs} />
+            <Table title="Crecimientos" rows={data.tables.growth} columns={columnDefs} />
+          </div>
+
+          <div className="grid">
+            <Table title="Hoteles nuevos" rows={data.tables.new} columns={columnDefs} />
+            <Table title="Hoteles perdidos" rows={data.tables.lost} columns={columnDefs} />
+          </div>
+
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h3>Consolidación por cluster</h3>
+                <p className="muted">Agrupación por prefijo de cliente hasta ':'</p>
+              </div>
+            </div>
+            <div className="grid">
+              <Table
+                title="Por cluster"
+                rows={data.clusters?.byCluster || []}
+                columns={[
+                  { key: 'Cluster', label: 'Cluster', render: (row) => row.Cluster },
+                  { key: 'Prev', label: data.meta.previousLabel, render: (row) => currency(row.Prev) },
+                  { key: 'Curr', label: data.meta.latestLabel, render: (row) => currency(row.Curr) },
+                  { key: 'VarAbs', label: 'Variación €', render: (row) => currency(row.VarAbs) },
+                  { key: 'VarPct', label: 'Variación %', render: (row) => percent(row.VarPct) },
+                ]}
+              />
+              {data.clusters?.byCountry?.length > 0 && (
+                <Table
+                  title="Por país"
+                  rows={data.clusters.byCountry}
+                  columns={[
+                    { key: 'Country', label: 'País', render: (row) => row.Country },
+                    { key: 'Prev', label: data.meta.previousLabel, render: (row) => currency(row.Prev) },
+                    { key: 'Curr', label: data.meta.latestLabel, render: (row) => currency(row.Curr) },
+                    { key: 'VarAbs', label: 'Variación €', render: (row) => currency(row.VarAbs) },
+                    { key: 'VarPct', label: 'Variación %', render: (row) => percent(row.VarPct) },
+                  ]}
+                />
+              )}
+            </div>
+            <Table
+              title="Por área comercial"
+              rows={data.clusters?.byArea || []}
+              columns={locationColumns}
+            />
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h3>Churn</h3>
+                <p className="muted">Hoteles sin ventas durante {churnMonths} meses o más.</p>
+              </div>
+            </div>
+            <Table
+              title="Hoteles en churn"
+              rows={(data.churn || []).sort((a, b) => (b.MonthsInactive || 0) - (a.MonthsInactive || 0))}
+              columns={[
+                { key: 'Cliente', label: 'Hotel', render: (row) => row.Cliente },
+                { key: 'Ubicacion', label: 'Ubicación', render: (row) => row.Ubicacion ?? '—' },
+                { key: 'MonthsInactive', label: 'Meses sin ventas', render: (row) => row.MonthsInactive },
+              ]}
+            />
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h3>Cohortes</h3>
+                <p className="muted">Tipos comunes: adquisición, comportamiento y predictivas.</p>
+              </div>
+              <div className="cohort-controls">
+                <label>
+                  <span>Vista</span>
+                  <select value={cohortMetric} onChange={(e) => setCohortMetric(e.target.value)}>
+                    <option value="active">% hoteles activos</option>
+                    <option value="revenue">% facturación retenida</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table className="cohort-table">
+                <thead>
+                  <tr>
+                    <th>Cohorte</th>
+                    <th>Tamaño</th>
+                    {(data.cohorts?.columns || []).map((col) => (
+                      <th key={col}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.cohorts?.rows || []).map((row) => (
+                    <tr key={row.cohort}>
+                      <td>{row.cohort}</td>
+                      <td>{row.size}</td>
+                      {(data.cohorts?.columns || []).map((_, idx) => {
+                        const values = cohortMetric === 'active' ? row.active : row.revenue;
+                        const value = values ? values[idx] : null;
+                        return (
+                          <td
+                            key={idx}
+                            style={{ backgroundColor: heatColor(value), color: value && value > 60 ? '#fff' : '#1b1b1f' }}
+                          >
+                            {value === null ? '—' : `${value}%`}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <Table
+            title="Análisis por ubicación"
+            rows={data.tables.locations}
+            columns={locationColumns}
+          />
+        </main>
+      )}
+    </div>
+  );
+}
