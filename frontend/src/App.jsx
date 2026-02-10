@@ -11,6 +11,8 @@ import {
   YAxis,
 } from "recharts";
 
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/\$/, "");
+
 const currency = (value) =>
   new Intl.NumberFormat("es-ES", {
     style: "currency",
@@ -230,7 +232,7 @@ export default function App() {
       formData.append("churn_months", churnMonths);
       formData.append("churn_months", churnMonths);
 
-      const response = await fetch("/api/analyze", {
+      const response = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         body: formData,
       });
@@ -288,7 +290,7 @@ export default function App() {
       formData.append("persist_threshold", persistThreshold);
       formData.append("recovery_threshold", recoveryThreshold);
 
-      const response = await fetch("/api/analyze/netsuite", {
+      const response = await fetch(`${API_BASE}/api/analyze/netsuite`, {
         method: "POST",
         body: formData,
       });
@@ -356,7 +358,7 @@ export default function App() {
         formData.append("export_modes", JSON.stringify(exportModes));
       }
 
-      const response = await fetch("/api/report/excel", {
+      const response = await fetch(`${API_BASE}/api/report/excel`, {
         method: "POST",
         body: formData,
       });
@@ -408,7 +410,7 @@ export default function App() {
       formData.append("recovery_threshold", recoveryThreshold);
       formData.append("churn_months", churnMonths);
 
-      const response = await fetch("/api/report/pdf", {
+      const response = await fetch(`${API_BASE}/api/report/pdf`, {
         method: "POST",
         body: formData,
       });
