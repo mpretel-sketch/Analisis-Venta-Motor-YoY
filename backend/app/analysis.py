@@ -1029,6 +1029,25 @@ def build_pdf_report_bytes(result: Dict) -> bytes:
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
 
+    def _fmt_currency(value):
+        try:
+            return f"€{float(value):,.0f}"
+        except Exception:
+            return "€0"
+
+    def _fmt_pct(value):
+        if value is None:
+            return "—"
+        try:
+            return f"{float(value):.1f}%"
+        except Exception:
+            return "—"
+
+    def _short(text, max_len=40):
+        if not text:
+            return "—"
+        return text if len(text) <= max_len else text[: max_len - 1] + "…"
+
     # Header
     primary = os.getenv("PDF_PRIMARY_COLOR", "#516BA6")
     secondary = os.getenv("PDF_SECONDARY_COLOR", "#A6A6A8")
@@ -1056,19 +1075,22 @@ def build_pdf_report_bytes(result: Dict) -> bytes:
         ("Variación absoluta", result["summary"]["totalVar"]),
         ("Variación %", result["summary"]["totalVarPct"]),
     ]
-    x, y = 40, height - 110
     card_w, card_h = 130, 40
+    gap = 10
+    total_w = 4 * card_w + 3 * gap
+    x = (width - total_w) / 2
+    y = height - 110
     for i, (label, value) in enumerate(kpis):
-        cx = x + i * (card_w + 10)
+        cx = x + i * (card_w + gap)
         c.setLineWidth(0.5)
         c.rect(cx, y, card_w, card_h, stroke=1, fill=0)
         c.setFont("Helvetica", 8)
         c.drawString(cx + 6, y + 24, label)
         c.setFont("Helvetica-Bold", 10)
         if "%" in label:
-            c.drawString(cx + 6, y + 10, f"{value:.1f}%")
+            c.drawString(cx + 6, y + 10, _fmt_pct(value))
         else:
-            c.drawString(cx + 6, y + 10, f"€{value:,.0f}")
+            c.drawString(cx + 6, y + 10, _fmt_currency(value))
 
     # Trend chart
     series = result.get("series", [])
@@ -1087,23 +1109,68 @@ def build_pdf_report_bytes(result: Dict) -> bytes:
     img_buf.seek(0)
     c.drawImage(ImageReader(img_buf), 40, height - 320, width=520, height=150)
 
-    # Top 5 alerts/growth
-    def _top_rows(rows, title, y_pos):
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(40, y_pos, title)
-        c.setFont("Helvetica", 8)
-        for idx, row in enumerate(rows[:5], 1):
-            label = row.get("Cliente", "")[:45]
-            var = row.get("VarAbs", 0)
-            c.drawString(40, y_pos - 12 * idx, f"{idx}. {label} ({var:,.0f}€)")
-
-    _top_rows(result["tables"]["alerts"], "Top 5 alertas", height - 350)
-    _top_rows(result["tables"]["growth"], "Top 5 crecimientos", height - 430)
-
     # Churn summary
+    chart_bottom = height - 320
     churn_count = len(result.get("churn", []))
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(40, 90, f"Churn (>{result['meta'].get('churnMonths', 9)} meses sin ventas): {churn_count} hoteles")
+    c.drawString(40, chart_bottom - 20, f"Churn (>{result['meta'].get('churnMonths', 9)} meses sin ventas): {churn_count} hoteles")
+
+    # Page 2 - Top 10 tables
+    c.showPage()
+    c.setFillColor(HexColor(primary))
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(40, height - 50, "Top 10 por tabla")
+    c.setFillColor(HexColor(secondary))
+    c.setFont("Helvetica", 9)
+    c.drawString(40, height - 65, result["meta"].get("periodLabel") or result["meta"].get("pairLabel"))
+
+    sections = [
+        ("Alertas (Top 10)", result["tables"]["alerts"], "VarAbs"),
+        ("Crecimientos (Top 10)", result["tables"]["growth"], "VarAbs"),
+        ("Hoteles nuevos (Top 10)", result["tables"]["new"], "Curr"),
+        ("Hoteles perdidos (Top 10)", result["tables"]["lost"], "Prev"),
+        ("Alertas persistentes (Top 10)", result.get("intelligentAlerts", {}).get("persistent", []), "Persistent"),
+        ("Recuperaciones (Top 10)", result.get("intelligentAlerts", {}).get("recovery", []), "Recovery"),
+    ]
+
+    def _format_row(row, mode_key):
+        name = _short(row.get("Cliente"), 38)
+        if mode_key == "VarAbs":
+            return f"{name} ({_fmt_currency(row.get('VarAbs', 0))})"
+        if mode_key == "Curr":
+            return f"{name} ({_fmt_currency(row.get('Curr', 0))})"
+        if mode_key == "Prev":
+            return f"{name} ({_fmt_currency(row.get('Prev', 0))})"
+        if mode_key == "Persistent":
+            last = _fmt_pct(row.get("VarPctLast"))
+            prev = _fmt_pct(row.get("VarPctPrev"))
+            return f"{name} ({prev} -> {last})"
+        if mode_key == "Recovery":
+            last = _fmt_pct(row.get("VarPctLast"))
+            prev = _fmt_pct(row.get("VarPctPrev"))
+            return f"{name} ({prev} -> {last})"
+        return name
+
+    def _draw_section(title, rows, x, y, mode_key):
+        c.setFont("Helvetica-Bold", 10)
+        c.setFillColor(HexColor(primary))
+        c.drawString(x, y, title)
+        y -= 12
+        c.setFont("Helvetica", 8)
+        c.setFillColor(HexColor("#000000"))
+        for idx, row in enumerate(rows[:10], 1):
+            c.drawString(x, y, f"{idx}. {_format_row(row, mode_key)}")
+            y -= 10
+        return y - 6
+
+    left_x, right_x = 40, 310
+    y_left = height - 100
+    y_right = height - 100
+    for idx, (title, rows, mode_key) in enumerate(sections):
+        if idx % 2 == 0:
+            y_left = _draw_section(title, rows, left_x, y_left, mode_key)
+        else:
+            y_right = _draw_section(title, rows, right_x, y_right, mode_key)
 
     c.showPage()
     c.save()
