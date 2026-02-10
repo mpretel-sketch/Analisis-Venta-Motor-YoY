@@ -1145,11 +1145,6 @@ export default function App() {
             />
           </section>
 
-                  </Geographies>
-                </ComposableMap>
-              </div>
-            </section>
-          )}
 
           <section className="panel">
             <div className="panel-head">
