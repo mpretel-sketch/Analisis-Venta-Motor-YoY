@@ -10,6 +10,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
+import { geoCentroid } from "d3-geo";
 
 const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/\$/, "");
 
@@ -24,6 +26,8 @@ const percent = (value) =>
   value === null || value === undefined
     ? "—"
     : `${value.toFixed(1)}%`;
+
+const geoUrl = "https://raw.githubusercontent.com/deldersveld/topojson/master/world-countries.json";
 
 const Table = ({ title, rows, columns, limit = 10, onRowClick }) => {
   const [expanded, setExpanded] = useState(false);
@@ -115,6 +119,33 @@ export default function App() {
     if (!file) {
       setTimeout(() => submitNetSuiteAnalysis(), 0);
     }
+  };
+
+  const countryRows = useMemo(() => {
+    return (data?.clusters?.byCountry || []).filter((row) => row.Country);
+  }, [data]);
+
+  const countryIndex = useMemo(() => {
+    const map = new Map();
+    countryRows.forEach((row) => {
+      map.set(String(row.Country).toUpperCase(), row);
+    });
+    return map;
+  }, [countryRows]);
+
+  const maxCountryValue = useMemo(() => {
+    const values = countryRows.map((row) => Number(row.Curr || 0));
+    return values.length ? Math.max(...values, 1) : 1;
+  }, [countryRows]);
+
+  const bubbleRadius = (value) => {
+    const v = Math.max(0, Number(value || 0));
+    return 4 + 20 * Math.sqrt(v / maxCountryValue);
+  };
+
+  const bubbleColor = (value) => {
+    if (value === null || value === undefined) return "#8aa0a6";
+    return value >= 0 ? "#0f6b6e" : "#c94b2a";
   };
 
 
@@ -1120,6 +1151,65 @@ export default function App() {
               onRowClick={(row) => applyFiltersAndReload({ location: row.Ubicacion, search: "" })}
             />
           </section>
+
+          {countryRows.length > 0 && (
+            <section className="panel map-panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Mapa global por país</h3>
+                  <p className="muted">Burbujas por facturación actual; color según variación YoY.</p>
+                </div>
+              </div>
+              <div className="map-wrap">
+                <ComposableMap projectionConfig={{ scale: 145 }}>
+                  <Geographies geography={geoUrl}>
+                    {({ geographies }) => (
+                      <>
+                        {geographies.map((geo) => (
+                          <Geography
+                            key={geo.rsmKey}
+                            geography={geo}
+                            fill="#f3efe8"
+                            stroke="#d9d1c6"
+                            strokeWidth={0.5}
+                          />
+                        ))}
+                        {geographies.map((geo) => {
+                          const props = geo.properties || {};
+                          const code = (
+                            props.ISO_A2 ||
+                            props.iso_a2 ||
+                            props.ISO2 ||
+                            props.ISO
+                          );
+                          if (!code) return null;
+                          const row = countryIndex.get(String(code).toUpperCase());
+                          if (!row) return null;
+                          const [x, y] = geoCentroid(geo);
+                          const radius = bubbleRadius(row.Curr);
+                          return (
+                            <Marker key={`${geo.rsmKey}-marker`} coordinates={[x, y]}>
+                              <circle
+                                r={radius}
+                                fill={bubbleColor(row.VarPct)}
+                                fillOpacity={0.55}
+                                stroke="#2a2f32"
+                                strokeWidth={0.6}
+                              >
+                                <title>
+                                  {`${row.Country} | ${currency(row.Curr)} | YoY ${percent(row.VarPct)}`}
+                                </title>
+                              </circle>
+                            </Marker>
+                          );
+                        })}
+                      </>
+                    )}
+                  </Geographies>
+                </ComposableMap>
+              </div>
+            </section>
+          )}
 
           <section className="panel">
             <div className="panel-head">
