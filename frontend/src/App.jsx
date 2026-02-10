@@ -27,7 +27,7 @@ const percent = (value) =>
     ? "—"
     : `${value.toFixed(1)}%`;
 
-const geoUrl = "https://raw.githubusercontent.com/deldersveld/topojson/master/world-countries.json";
+const geoUrl = "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson";
 
 const Table = ({ title, rows, columns, limit = 10, onRowClick }) => {
   const [expanded, setExpanded] = useState(false);
@@ -1180,7 +1180,9 @@ export default function App() {
                             props.ISO_A2 ||
                             props.iso_a2 ||
                             props.ISO2 ||
-                            props.ISO
+                            props.ISO ||
+                            props.alpha2 ||
+                            props.A2
                           );
                           if (!code) return null;
                           const row = countryIndex.get(String(code).toUpperCase());
