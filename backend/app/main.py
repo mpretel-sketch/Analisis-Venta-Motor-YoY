@@ -28,7 +28,7 @@ def _sanitize_json(value):
         return value if math.isfinite(value) else None
     return value
 
-from .analysis import AnalysisError, analyze_yoy, build_excel_report_bytes, build_excel_report_bytes_multi, build_pdf_report_bytes
+from .analysis import AnalysisError, analyze_yoy, build_excel_report_bytes, build_excel_report_bytes_multi
 from .netsuite_client import get_netsuite_client, NetSuiteError, dataframe_to_excel_format
 
 app = FastAPI(title="Early Warning YoY")
@@ -168,53 +168,6 @@ async def report_excel(
         raise HTTPException(status_code=500, detail=f"Error inesperado: {exc}") from exc
 
 
-
-
-@app.post("/api/report/pdf")
-async def report_pdf(
-    file: UploadFile = File(...),
-    alert_threshold: Optional[float] = Form(-30.0),
-    mode: Optional[str] = Form("month"),
-    month_key: Optional[str] = Form(None),
-    search: Optional[str] = Form(None),
-    location: Optional[str] = Form(None),
-    impact_min: Optional[float] = Form(None),
-    impact_max: Optional[float] = Form(None),
-    var_min: Optional[float] = Form(None),
-    var_max: Optional[float] = Form(None),
-    persist_threshold: Optional[float] = Form(None),
-    recovery_threshold: Optional[float] = Form(None),
-    churn_months: Optional[int] = Form(9),
-):
-    try:
-        file_bytes = await file.read()
-        result = analyze_yoy(
-            file_bytes,
-            file.filename,
-            alert_threshold=alert_threshold or -30.0,
-            mode=(mode or "month"),
-            month_key=month_key,
-            search=search,
-            location=location,
-            impact_min=impact_min,
-            impact_max=impact_max,
-            var_min=var_min,
-            var_max=var_max,
-            persist_threshold=persist_threshold,
-            recovery_threshold=recovery_threshold,
-            churn_months=churn_months or 9,
-        )
-        content = build_pdf_report_bytes(result)
-        return Response(
-            content=content,
-            media_type="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=Executive_YoY_Report.pdf"},
-        )
-    except AnalysisError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.exception("Error inesperado en /api/report/pdf")
-        raise HTTPException(status_code=500, detail=f"Error inesperado: {exc}") from exc
 @app.post("/api/analyze/netsuite")
 async def analyze_netsuite(
     alert_threshold: Optional[float] = Form(-30.0),

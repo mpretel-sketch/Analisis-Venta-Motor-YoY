@@ -436,58 +436,6 @@ export default function App() {
     }
   };
 
-  const handleDownloadPdf = async () => {
-    if (!file) return;
-    setLoading(true);
-    setError(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("alert_threshold", threshold);
-      formData.append("mode", mode);
-      if (monthKey) formData.append("month_key", monthKey);
-      if (search) formData.append("search", search);
-      if (location) formData.append("location", location);
-      if (impactMin !== "") formData.append("impact_min", impactMin);
-      if (impactMax !== "") formData.append("impact_max", impactMax);
-      if (varMin !== "") formData.append("var_min", varMin);
-      if (varMax !== "") formData.append("var_max", varMax);
-      formData.append("persist_threshold", persistThreshold);
-      formData.append("recovery_threshold", recoveryThreshold);
-      formData.append("churn_months", churnMonths);
-
-      const response = await fetch(`${API_BASE}/api/report/pdf`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        let message = "Error al generar el PDF.";
-        try {
-          const err = await response.json();
-          message = err.detail || message;
-        } catch {
-          const text = await response.text();
-          if (text) message = text;
-        }
-        throw new Error(message);
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "Executive_YoY_Report.pdf";
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const isSameComparator =
     data &&
     compareMode === data.meta?.mode &&
@@ -679,8 +627,7 @@ export default function App() {
               <button
                 type="button"
                 className="secondary"
-                onClick={submitNetSuiteAnalysis}
-                disabled={loading}
+                disabled={true}
                 title="Obtener datos directamente desde NetSuite"
               >
                 📡 Analizar desde NetSuite
@@ -692,14 +639,6 @@ export default function App() {
                 disabled={!file || loading}
               >
                 Descargar Excel
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={handleDownloadPdf}
-                disabled={!file || loading}
-              >
-                Descargar PDF
               </button>
               <button
                 type="button"
