@@ -345,6 +345,10 @@ def analyze_yoy(
                     + " "
                     + filtered.get("Hotel - Code", "").astype(str).str.lower()
                 )
+                if "Ubicación" in filtered.columns:
+                    hay = hay + " " + filtered["Ubicación"].astype(str).str.lower()
+                if country_col and country_col in filtered.columns:
+                    hay = hay + " " + filtered[country_col].astype(str).str.lower()
                 filtered = filtered[hay.str.contains(needle, na=False)]
         if location and location != "all" and "Ubicación" in filtered.columns:
             filtered = filtered[filtered["Ubicación"] == location]

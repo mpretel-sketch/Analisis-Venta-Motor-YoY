@@ -198,6 +198,12 @@ export default function App() {
     return list.slice(0, 8);
   };
 
+  const pieLabel = ({ name, percent }) => {
+    if (!name) return "";
+    const pct = (percent * 100).toFixed(1);
+    return `${name} ${pct}%`;
+  };
+
   const Sparkline = ({ data, metric }) => {
     if (!data?.length) return <span className="muted">—</span>;
     const key = metric === "pct" ? "varPct" : "curr";
@@ -706,6 +712,24 @@ export default function App() {
             </div>
           </form>
           {error && <p className="error">{error}</p>}
+          {loading && (
+            <div className="loading-overlay">
+              <div className="loading-card">
+                <div className="loading-ring"></div>
+                <div className="loading-icon">
+                  <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <rect x="18" y="16" width="28" height="34" rx="2" fill="#516BA6" />
+                    <rect x="24" y="22" width="6" height="6" fill="#F6EFE6" />
+                    <rect x="34" y="22" width="6" height="6" fill="#F6EFE6" />
+                    <rect x="24" y="32" width="6" height="6" fill="#F6EFE6" />
+                    <rect x="34" y="32" width="6" height="6" fill="#F6EFE6" />
+                    <rect x="29" y="42" width="6" height="8" fill="#F6EFE6" />
+                  </svg>
+                </div>
+                <p>Procesando datos…</p>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -1220,8 +1244,7 @@ export default function App() {
             <div className="panel-head">
               <div>
                 <h3>Distribución por ubicación y país</h3>
-                <p className="muted">Quesitos por facturación actual.</p>
-              </div>
+                              </div>
             </div>
             <div className="grid">
               <div className="chart">
@@ -1232,9 +1255,12 @@ export default function App() {
                       data={buildPieData(data.tables.locations, "Ubicacion")}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={55}
-                      outerRadius={95}
+                      innerRadius={60}
+                      outerRadius={110}
                       paddingAngle={2}
+                      label={pieLabel}
+                      labelLine={false}
+                      onClick={(data) => applyFiltersAndReload({ location: data?.name || "all" })}
                     >
                       {buildPieData(data.tables.locations, "Ubicacion").map((entry, idx) => (
                         <Cell key={`loc-${idx}`} fill={pieColors[idx % pieColors.length]} />
@@ -1252,9 +1278,12 @@ export default function App() {
                       data={buildPieData(data.clusters?.byCountry || [], "Country")}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={55}
-                      outerRadius={95}
+                      innerRadius={60}
+                      outerRadius={110}
                       paddingAngle={2}
+                      label={pieLabel}
+                      labelLine={false}
+                      onClick={(data) => applyFiltersAndReload({ search: data?.name || "" })}
                     >
                       {buildPieData(data.clusters?.byCountry || [], "Country").map((entry, idx) => (
                         <Cell key={`country-${idx}`} fill={pieColors[idx % pieColors.length]} />
