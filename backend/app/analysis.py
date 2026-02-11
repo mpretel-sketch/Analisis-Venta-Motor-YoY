@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
+import hashlib
+from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple
 import re
 
@@ -69,6 +71,27 @@ class AnalysisError(Exception):
     pass
 
 
+_EXCEL_CACHE = OrderedDict()
+_EXCEL_CACHE_MAX = 4
+
+
+def _excel_cache_get(file_bytes: bytes) -> Optional[pd.DataFrame]:
+    key = hashlib.md5(file_bytes).hexdigest()
+    cached = _EXCEL_CACHE.get(key)
+    if cached is None:
+        return None
+    _EXCEL_CACHE.move_to_end(key)
+    return cached.copy(deep=True)
+
+
+def _excel_cache_set(file_bytes: bytes, df: pd.DataFrame) -> None:
+    key = hashlib.md5(file_bytes).hexdigest()
+    _EXCEL_CACHE[key] = df
+    _EXCEL_CACHE.move_to_end(key)
+    while len(_EXCEL_CACHE) > _EXCEL_CACHE_MAX:
+        _EXCEL_CACHE.popitem(last=False)
+
+
 def _detect_header_row(df_head: pd.DataFrame) -> Optional[int]:
     for idx in range(min(15, len(df_head))):
         row = df_head.iloc[idx]
@@ -78,6 +101,10 @@ def _detect_header_row(df_head: pd.DataFrame) -> Optional[int]:
 
 
 def _read_excel(file_bytes: bytes, filename: str) -> pd.DataFrame:
+    cached_df = _excel_cache_get(file_bytes)
+    if cached_df is not None:
+        return cached_df
+
     ext = filename.lower().split(".")[-1]
     engine = None
     if ext == "xls":
@@ -104,7 +131,8 @@ def _read_excel(file_bytes: bytes, filename: str) -> pd.DataFrame:
         header_row = 6
 
     df = pd.read_excel(BytesIO(file_bytes), engine=engine, header=header_row)
-    return df
+    _excel_cache_set(file_bytes, df)
+    return df.copy(deep=True)
 
 
 def _parse_month_column(col: str) -> Optional[MonthColumn]:

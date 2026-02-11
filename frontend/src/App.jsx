@@ -197,13 +197,7 @@ export default function App() {
       }))
       .filter((row) => row.name);
     list.sort((a, b) => b.value - a.value);
-    return list.slice(0, 8);
-  };
-
-  const pieLabel = ({ name, percent }) => {
-    if (!name) return "";
-    const pct = (percent * 100).toFixed(1);
-    return `${name} ${pct}%`;
+    return list.slice(0, 10);
   };
 
   const Sparkline = ({ data, metric }) => {
@@ -1103,7 +1097,6 @@ export default function App() {
             <div className="panel-head">
               <div>
                 <h3>Consolidación por cluster</h3>
-                <p className="muted">Agrupación por prefijo de cliente hasta ':'</p>
               </div>
             </div>
             <div className="grid">
@@ -1133,12 +1126,6 @@ export default function App() {
                 />
               )}
             </div>
-            <Table
-              title="Por área comercial"
-              rows={data.clusters?.byArea || []}
-              columns={locationColumns}
-              onRowClick={(row) => applyFiltersAndReload({ location: row.Ubicacion, search: "" })}
-            />
           </section>
 
 
@@ -1221,17 +1208,15 @@ export default function App() {
             <div className="grid">
               <div className="chart">
                 <h4>Ubicación</h4>
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={340}>
                   <PieChart>
                     <Pie
                       data={locationPieData}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={60}
-                      outerRadius={110}
+                      innerRadius={72}
+                      outerRadius={132}
                       paddingAngle={2}
-                      label={pieLabel}
-                      labelLine={false}
                       onClick={(data) => applyFiltersAndReload({ location: data?.name || "all" })}
                     >
                       {locationPieData.map((entry, idx) => (
@@ -1241,20 +1226,36 @@ export default function App() {
                     <Tooltip formatter={(v) => currency(v)} />
                   </PieChart>
                 </ResponsiveContainer>
+                <div className="pie-legend">
+                  {locationPieData.map((row) => {
+                    const total = locationPieData.reduce((acc, r) => acc + (r.value || 0), 0) || 1;
+                    const pct = ((row.value / total) * 100).toFixed(1);
+                    return (
+                      <button
+                        key={`loc-legend-${row.name}`}
+                        type="button"
+                        className="pie-legend-item"
+                        onClick={() => applyFiltersAndReload({ location: row.name })}
+                      >
+                        <span className="dot" style={{ backgroundColor: pieColors[locationPieData.indexOf(row) % pieColors.length] }} />
+                        <span>{row.name}</span>
+                        <span>{pct}%</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="chart">
                 <h4>País</h4>
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={340}>
                   <PieChart>
                     <Pie
                       data={countryPieData}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={60}
-                      outerRadius={110}
+                      innerRadius={72}
+                      outerRadius={132}
                       paddingAngle={2}
-                      label={pieLabel}
-                      labelLine={false}
                       onClick={(data) => applyFiltersAndReload({ search: data?.name || "" })}
                     >
                       {countryPieData.map((entry, idx) => (
@@ -1264,6 +1265,24 @@ export default function App() {
                     <Tooltip formatter={(v) => currency(v)} />
                   </PieChart>
                 </ResponsiveContainer>
+                <div className="pie-legend">
+                  {countryPieData.map((row) => {
+                    const total = countryPieData.reduce((acc, r) => acc + (r.value || 0), 0) || 1;
+                    const pct = ((row.value / total) * 100).toFixed(1);
+                    return (
+                      <button
+                        key={`country-legend-${row.name}`}
+                        type="button"
+                        className="pie-legend-item"
+                        onClick={() => applyFiltersAndReload({ search: row.name })}
+                      >
+                        <span className="dot" style={{ backgroundColor: pieColors[countryPieData.indexOf(row) % pieColors.length] }} />
+                        <span>{row.name}</span>
+                        <span>{pct}%</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </section>

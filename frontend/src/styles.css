@@ -473,3 +473,32 @@ th {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+.pie-legend {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.pie-legend-item {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e9dccf;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.pie-legend-item:hover {
+  background: #f7f1e9;
+}
+
+.pie-legend-item .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
