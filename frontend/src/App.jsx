@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -107,6 +107,8 @@ export default function App() {
   const [showTopImpact, setShowTopImpact] = useState(true);
   const [showSmartAlerts, setShowSmartAlerts] = useState(true);
   const [compareEnabled, setCompareEnabled] = useState(false);
+  const analyzeAbortRef = useRef(null);
+  const analyzeRequestIdRef = useRef(0);
 
   const applyFiltersAndReload = (next) => {
     if (Object.prototype.hasOwnProperty.call(next, "search")) {
@@ -238,6 +240,12 @@ export default function App() {
     return Array.from(set).sort();
   }, [data]);
 
+
+  const topAlerts10 = useMemo(() => data?.tables?.alerts?.slice(0, 10) || [], [data]);
+  const topGrowth10 = useMemo(() => data?.tables?.growth?.slice(0, 10) || [], [data]);
+  const locationPieData = useMemo(() => buildPieData(data?.tables?.locations, "Ubicacion"), [data?.tables?.locations]);
+  const countryPieData = useMemo(() => buildPieData(data?.clusters?.byCountry || [], "Country"), [data?.clusters?.byCountry]);
+
   useEffect(() => {
     if (data?.meta?.monthKey && !monthKey) {
       setMonthKey(data.meta.monthKey);
@@ -253,6 +261,14 @@ export default function App() {
   const submitAnalysis = async (event) => {
     if (event?.preventDefault) event.preventDefault();
     if (!file) return;
+
+    if (analyzeAbortRef.current) {
+      analyzeAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    analyzeAbortRef.current = controller;
+    const requestId = ++analyzeRequestIdRef.current;
+
     setLoading(true);
     setError(null);
 
@@ -277,11 +293,11 @@ export default function App() {
       formData.append("persist_threshold", persistThreshold);
       formData.append("recovery_threshold", recoveryThreshold);
       formData.append("churn_months", churnMonths);
-      formData.append("churn_months", churnMonths);
 
       const response = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -302,11 +318,19 @@ export default function App() {
       } catch {
         throw new Error("Respuesta inválida del servidor.");
       }
-      setData(json);
+
+      if (requestId === analyzeRequestIdRef.current) {
+        setData(json);
+      }
     } catch (err) {
+      if (err?.name === "AbortError") {
+        return;
+      }
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (requestId === analyzeRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -435,6 +459,15 @@ export default function App() {
       setLoading(false);
     }
   };
+
+
+  useEffect(() => {
+    return () => {
+      if (analyzeAbortRef.current) {
+        analyzeAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   const isSameComparator =
     data &&
@@ -920,7 +953,7 @@ export default function App() {
                   <h4>Alertas</h4>
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart
-                      data={data.tables.alerts.slice(0, 10).map((row) => ({
+                      data={topAlerts10.map((row) => ({
                         name: row.Cliente?.slice(0, 20) || "-",
                         impact: Math.abs(row.VarAbs || 0),
                       }))}
@@ -934,7 +967,7 @@ export default function App() {
                     </BarChart>
                   </ResponsiveContainer>
                   <div className="spark-grid">
-                    {data.tables.alerts.slice(0, 10).map((row) => (
+                    {topAlerts10.map((row) => (
                       <div key={row.Cliente} className="spark-row">
                         <p className="spark-name">{row.Cliente}</p>
                         <small className="muted">YoY %</small>
@@ -949,7 +982,7 @@ export default function App() {
                   <h4>Crecimientos</h4>
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart
-                      data={data.tables.growth.slice(0, 10).map((row) => ({
+                      data={topGrowth10.map((row) => ({
                         name: row.Cliente?.slice(0, 20) || "-",
                         impact: row.VarAbs || 0,
                       }))}
@@ -963,7 +996,7 @@ export default function App() {
                     </BarChart>
                   </ResponsiveContainer>
                   <div className="spark-grid">
-                    {data.tables.growth.slice(0, 10).map((row) => (
+                    {topGrowth10.map((row) => (
                       <div key={row.Cliente} className="spark-row">
                         <p className="spark-name">{row.Cliente}</p>
                         <small className="muted">YoY %</small>
@@ -1191,7 +1224,7 @@ export default function App() {
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
                     <Pie
-                      data={buildPieData(data.tables.locations, "Ubicacion")}
+                      data={locationPieData}
                       dataKey="value"
                       nameKey="name"
                       innerRadius={60}
@@ -1201,7 +1234,7 @@ export default function App() {
                       labelLine={false}
                       onClick={(data) => applyFiltersAndReload({ location: data?.name || "all" })}
                     >
-                      {buildPieData(data.tables.locations, "Ubicacion").map((entry, idx) => (
+                      {locationPieData.map((entry, idx) => (
                         <Cell key={`loc-${idx}`} fill={pieColors[idx % pieColors.length]} />
                       ))}
                     </Pie>
@@ -1214,7 +1247,7 @@ export default function App() {
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
                     <Pie
-                      data={buildPieData(data.clusters?.byCountry || [], "Country")}
+                      data={countryPieData}
                       dataKey="value"
                       nameKey="name"
                       innerRadius={60}
@@ -1224,7 +1257,7 @@ export default function App() {
                       labelLine={false}
                       onClick={(data) => applyFiltersAndReload({ search: data?.name || "" })}
                     >
-                      {buildPieData(data.clusters?.byCountry || [], "Country").map((entry, idx) => (
+                      {countryPieData.map((entry, idx) => (
                         <Cell key={`country-${idx}`} fill={pieColors[idx % pieColors.length]} />
                       ))}
                     </Pie>
