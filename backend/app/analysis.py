@@ -89,11 +89,12 @@ def _read_excel(file_bytes: bytes, filename: str) -> pd.DataFrame:
         raise AnalysisError("Formato no soportado. Usa .xls o .xlsx")
 
     try:
-        preview = pd.read_excel(BytesIO(file_bytes), engine=engine, header=None)
+        # Only sample first rows to detect header and avoid a full initial parse.
+        preview = pd.read_excel(BytesIO(file_bytes), engine=engine, header=None, nrows=30)
     except Exception:
         # If extension lies (e.g., .xls but actually xlsx), fallback to openpyxl.
         if engine != "openpyxl":
-            preview = pd.read_excel(BytesIO(file_bytes), engine="openpyxl", header=None)
+            preview = pd.read_excel(BytesIO(file_bytes), engine="openpyxl", header=None, nrows=30)
             engine = "openpyxl"
         else:
             raise
@@ -314,15 +315,13 @@ def analyze_yoy(
     df["Previous_Sum"] = df[[m.col for m in prev_cols]].sum(axis=1)
 
     df["Var_Absoluta"] = df["Current_Sum"] - df["Previous_Sum"]
-
-    def _var_pct(row):
-        if row["Previous_Sum"] == 0:
-            if row["Current_Sum"] == 0:
-                return 0.0
-            return np.nan
-        return (row["Current_Sum"] - row["Previous_Sum"]) / row["Previous_Sum"] * 100
-
-    df["Var_%"] = df.apply(_var_pct, axis=1)
+    prev_nonzero = df["Previous_Sum"] != 0
+    both_zero = (df["Previous_Sum"] == 0) & (df["Current_Sum"] == 0)
+    df["Var_%"] = np.where(
+        prev_nonzero,
+        (df["Current_Sum"] - df["Previous_Sum"]) / df["Previous_Sum"] * 100,
+        np.where(both_zero, 0.0, np.nan),
+    )
     df["Impacto"] = df["Var_Absoluta"].abs()
 
     # Cluster derivado por prefijo de Cliente hasta ':'
@@ -382,28 +381,24 @@ def analyze_yoy(
     lost_hotels = df_filtered[(df_filtered["Previous_Sum"] > 0) & (df_filtered["Current_Sum"] == 0)].sort_values("Previous_Sum", ascending=False)
 
     def _rows(dfx: pd.DataFrame) -> List[Dict]:
-        cols = [
-            "Cliente",
-            "Hotel - Code" if "Hotel - Code" in dfx.columns else None,
-            "Ubicación" if "Ubicación" in dfx.columns else None,
-            "Previous_Sum",
-            "Current_Sum",
-            "Var_Absoluta",
-            "Var_%",
-        ]
-        cols = [c for c in cols if c is not None]
-        out = []
-        for _, row in dfx[cols].iterrows():
-            out.append({
-                "Cliente": row.get("Cliente"),
-                "HotelCode": row.get("Hotel - Code") if "Hotel - Code" in row else None,
-                "Ubicacion": row.get("Ubicación") if "Ubicación" in row else None,
-                "Prev": _safe_float(row.get("Previous_Sum")) or 0.0,
-                "Curr": _safe_float(row.get("Current_Sum")) or 0.0,
-                "VarAbs": _safe_float(row.get("Var_Absoluta")) or 0.0,
-                "VarPct": None if pd.isna(row.get("Var_%")) else _safe_float(row.get("Var_%")),
-            })
-        return out
+        if dfx.empty:
+            return []
+        out = pd.DataFrame({
+            "Cliente": dfx["Cliente"],
+            "HotelCode": dfx["Hotel - Code"] if "Hotel - Code" in dfx.columns else None,
+            "Ubicacion": dfx["Ubicación"] if "Ubicación" in dfx.columns else None,
+            "Prev": dfx["Previous_Sum"],
+            "Curr": dfx["Current_Sum"],
+            "VarAbs": dfx["Var_Absoluta"],
+            "VarPct": dfx["Var_%"],
+        })
+        out = out.replace([np.inf, -np.inf], np.nan)
+        out["Prev"] = out["Prev"].fillna(0.0).astype(float)
+        out["Curr"] = out["Curr"].fillna(0.0).astype(float)
+        out["VarAbs"] = out["VarAbs"].fillna(0.0).astype(float)
+        out["VarPct"] = out["VarPct"].astype(float)
+        out = out.where(pd.notna(out), None)
+        return out.to_dict("records")
 
     ubicacion_analysis = None
     if "Ubicación" in df_filtered.columns:
@@ -465,34 +460,28 @@ def analyze_yoy(
         prev_month = month_cols[-2]
         latest_prev = _find_month_by_key(month_cols, f"{latest.year - 1:04d}-{latest.month:02d}")
         prev_prev = _find_month_by_key(month_cols, f"{prev_month.year - 1:04d}-{prev_month.month:02d}")
-
         if latest_prev and prev_prev:
-            def _yoy(row, current: MonthColumn, previous: MonthColumn):
-                curr = float(pd.to_numeric(row.get(current.col, 0), errors="coerce") or 0)
-                prev = float(pd.to_numeric(row.get(previous.col, 0), errors="coerce") or 0)
-                if prev == 0:
-                    return None
-                return (curr - prev) / prev * 100
+            curr_last = pd.to_numeric(df_filtered[latest.col], errors="coerce").fillna(0.0)
+            prev_last = pd.to_numeric(df_filtered[latest_prev.col], errors="coerce").fillna(0.0)
+            curr_prev = pd.to_numeric(df_filtered[prev_month.col], errors="coerce").fillna(0.0)
+            prev_prev_vals = pd.to_numeric(df_filtered[prev_prev.col], errors="coerce").fillna(0.0)
 
-            for _, row in df_filtered.iterrows():
-                var_last = _yoy(row, latest, latest_prev)
-                var_prev = _yoy(row, prev_month, prev_prev)
-                if var_last is None or var_prev is None:
-                    continue
-                if var_last <= persist_threshold and var_prev <= persist_threshold:
-                    intelligent_alerts["persistent"].append({
-                        "Cliente": row.get("Cliente"),
-                        "Ubicacion": row.get("Ubicación") if "Ubicación" in row else None,
-                        "VarPctLast": var_last,
-                        "VarPctPrev": var_prev,
-                    })
-                if var_prev <= persist_threshold and var_last >= recovery_threshold:
-                    intelligent_alerts["recovery"].append({
-                        "Cliente": row.get("Cliente"),
-                        "Ubicacion": row.get("Ubicación") if "Ubicación" in row else None,
-                        "VarPctLast": var_last,
-                        "VarPctPrev": var_prev,
-                    })
+            var_last = np.where(prev_last != 0, (curr_last - prev_last) / prev_last * 100, np.nan)
+            var_prev = np.where(prev_prev_vals != 0, (curr_prev - prev_prev_vals) / prev_prev_vals * 100, np.nan)
+
+            alerts_df = pd.DataFrame({
+                "Cliente": df_filtered["Cliente"],
+                "Ubicacion": df_filtered["Ubicación"] if "Ubicación" in df_filtered.columns else None,
+                "VarPctLast": var_last,
+                "VarPctPrev": var_prev,
+            }).replace([np.inf, -np.inf], np.nan)
+
+            valid = alerts_df["VarPctLast"].notna() & alerts_df["VarPctPrev"].notna()
+            persistent_mask = valid & (alerts_df["VarPctLast"] <= persist_threshold) & (alerts_df["VarPctPrev"] <= persist_threshold)
+            recovery_mask = valid & (alerts_df["VarPctPrev"] <= persist_threshold) & (alerts_df["VarPctLast"] >= recovery_threshold)
+
+            intelligent_alerts["persistent"] = alerts_df[persistent_mask].to_dict("records")
+            intelligent_alerts["recovery"] = alerts_df[recovery_mask].to_dict("records")
 
     # Consolidación por cluster / país / área comercial
     cluster_summary = df_filtered.groupby("Cluster").agg({
@@ -536,30 +525,23 @@ def analyze_yoy(
                 "VarAbs": _safe_float(row["Var_Absoluta"]) or 0.0,
                 "VarPct": _safe_float(row["Var_%"]),
             })
-
     # Churn: hoteles con 0 ventas por N meses
     churn_list = []
     if month_cols:
-        latest_month = month_cols[-1]
-        def _months_diff(y1, m1, y2, m2):
-            return (y1 - y2) * 12 + (m1 - m2)
+        month_col_names = [m.col for m in month_cols]
+        sales = df_filtered[month_col_names].apply(pd.to_numeric, errors="coerce").fillna(0.0).to_numpy()
+        active = sales > 0
+        rev_active = active[:, ::-1]
+        has_any = rev_active.any(axis=1)
+        idx_from_latest = np.where(has_any, np.argmax(rev_active, axis=1), len(month_cols))
+        months_inactive = idx_from_latest.astype(int)
 
-        for _, row in df_filtered.iterrows():
-            last_active = None
-            for mc in month_cols:
-                val = pd.to_numeric(row.get(mc.col, 0), errors="coerce")
-                if val and val > 0:
-                    last_active = mc
-            if last_active is None:
-                months_inactive = _months_diff(latest_month.year, latest_month.month, month_cols[0].year, month_cols[0].month) + 1
-            else:
-                months_inactive = _months_diff(latest_month.year, latest_month.month, last_active.year, last_active.month)
-            if months_inactive >= churn_months:
-                churn_list.append({
-                    "Cliente": row.get("Cliente"),
-                    "Ubicacion": row.get("Ubicación") if "Ubicación" in row else None,
-                    "MonthsInactive": months_inactive,
-                })
+        churn_df = pd.DataFrame({
+            "Cliente": df_filtered["Cliente"],
+            "Ubicacion": df_filtered["Ubicación"] if "Ubicación" in df_filtered.columns else None,
+            "MonthsInactive": months_inactive,
+        })
+        churn_list = churn_df[churn_df["MonthsInactive"] >= churn_months].to_dict("records")
 
     # Cohortes: por primer mes con ventas
     cohort_map = {}
