@@ -949,10 +949,6 @@ export default function App() {
               </div>
               <div className="grid">
                 <div className="chart">
-                  <h4>Headline</h4>
-                  <p>{data.aiSummary.headline}</p>
-                </div>
-                <div className="chart">
                   <h4>Conclusiones</h4>
                   <ul>
                     {(data.aiSummary.conclusions || []).map((item, idx) => (
@@ -994,7 +990,7 @@ export default function App() {
                 </div>
                 {!!(data.aiSummary.actionableFilters || []).length && (
                   <div className="chart">
-                    <h4>Filtros accionables</h4>
+                    <h4>Tags</h4>
                     <div className="actions">
                       {(data.aiSummary.actionableFilters || []).map((f, idx) => (
                         <button

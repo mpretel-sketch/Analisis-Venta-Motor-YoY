@@ -838,7 +838,7 @@ def _build_ai_summary_gemini(
         return None, "missing_gemini_api_key"
 
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "12"))
+    timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "6"))
 
     payload = {
         "period": period_label,
@@ -909,7 +909,7 @@ def _build_ai_summary_gemini(
                     "responseMimeType": "application/json",
                 },
             },
-            timeout=timeout,
+            timeout=(3.0, timeout),
         )
         response.raise_for_status()
         data = response.json()
