@@ -189,7 +189,18 @@ export default function App() {
     "#bfa27a",
   ];
 
-  const regionNames = useMemo(() => new Intl.DisplayNames(["es"], { type: "region" }), []);
+  const countryNameMap = {
+    ES: "Espana",
+    MX: "Mexico",
+    PT: "Portugal",
+    US: "Estados Unidos",
+    CO: "Colombia",
+    DE: "Alemania",
+    FR: "Francia",
+    GB: "Reino Unido",
+    IT: "Italia",
+    AD: "Andorra",
+  };
 
   const buildPieData = (rows, keyName, { isCountry = false, maxItems = 7 } = {}) => {
     const grouped = new Map();
@@ -201,7 +212,7 @@ export default function App() {
 
       const normalizedCode = raw.toUpperCase();
       const label = isCountry && normalizedCode.length === 2
-        ? (regionNames.of(normalizedCode) || normalizedCode)
+        ? (countryNameMap[normalizedCode] || normalizedCode)
         : raw;
 
       const key = isCountry ? normalizedCode : label;
@@ -1261,6 +1272,8 @@ export default function App() {
                       innerRadius={72}
                       outerRadius={132}
                       paddingAngle={2}
+                      label={false}
+                      labelLine={false}
                       onClick={(entry) => applyFiltersAndReload({ location: entry?.filterValue || "all" })}
                     >
                       {locationPieView.map((entry, idx) => (
@@ -1296,6 +1309,8 @@ export default function App() {
                       innerRadius={72}
                       outerRadius={132}
                       paddingAngle={2}
+                      label={false}
+                      labelLine={false}
                       onClick={(entry) => applyFiltersAndReload({ search: entry?.filterValue || "" })}
                     >
                       {countryPieView.map((entry, idx) => (
@@ -1322,6 +1337,48 @@ export default function App() {
               </div>
             </div>
           </section>
+
+
+          {data.aiSummary && (
+            <section className="panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Resumen inteligente</h3>
+                  <p className="muted">Conclusiones y observaciones automáticas del periodo.</p>
+                </div>
+              </div>
+              <div className="grid">
+                <div className="chart">
+                  <h4>Headline</h4>
+                  <p>{data.aiSummary.headline}</p>
+                </div>
+                <div className="chart">
+                  <h4>Conclusiones</h4>
+                  <ul>
+                    {(data.aiSummary.conclusions || []).map((item, idx) => (
+                      <li key={`c-${idx}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="chart">
+                  <h4>Observaciones</h4>
+                  <ul>
+                    {(data.aiSummary.observations || []).map((item, idx) => (
+                      <li key={`o-${idx}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="chart">
+                  <h4>Acciones sugeridas</h4>
+                  <ul>
+                    {(data.aiSummary.actions || []).map((item, idx) => (
+                      <li key={`a-${idx}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </section>
+          )}
 
           <Table
             title="Análisis por ubicación"

@@ -678,8 +678,85 @@ def analyze_yoy(
             "columns": cohort_cols,
             "rows": cohort_rows,
         },
+        "aiSummary": _build_ai_summary(
+            {
+                "totalPrev": total_previous,
+                "totalCurr": total_current,
+                "totalVar": total_var,
+                "totalVarPct": total_var_pct,
+                "alertsCount": int(len(alerts)),
+                "growthCount": int(len(growth)),
+            },
+            alerts,
+            growth,
+            country_rows,
+            locations,
+            period_label,
+        ),
     }
 
+
+
+
+def _build_ai_summary(
+    summary: Dict,
+    alerts: pd.DataFrame,
+    growth: pd.DataFrame,
+    country_rows: List[Dict],
+    location_rows: List[Dict],
+    period_label: str,
+) -> Dict:
+    total_var_pct = float(summary.get("totalVarPct", 0.0) or 0.0)
+    total_var = float(summary.get("totalVar", 0.0) or 0.0)
+    headline = (
+        f"{period_label}: crecimiento YoY de {total_var_pct:.1f}% ({total_var:,.0f} EUR)."
+        if total_var_pct >= 0
+        else f"{period_label}: caida YoY de {abs(total_var_pct):.1f}% ({abs(total_var):,.0f} EUR)."
+    )
+
+    conclusions = []
+    observations = []
+    actions = []
+
+    conclusions.append(
+        f"Facturacion actual {summary.get('totalCurr', 0):,.0f} EUR vs {summary.get('totalPrev', 0):,.0f} EUR del periodo comparable."
+    )
+
+    if len(alerts):
+        top_alert = alerts.iloc[0]
+        conclusions.append(
+            f"Mayor caida: {top_alert.get('Cliente', 'N/D')} con impacto {float(top_alert.get('Var_Absoluta', 0) or 0):,.0f} EUR."
+        )
+    if len(growth):
+        top_growth = growth.iloc[0]
+        conclusions.append(
+            f"Mayor crecimiento: {top_growth.get('Cliente', 'N/D')} con mejora {float(top_growth.get('Var_Absoluta', 0) or 0):,.0f} EUR."
+        )
+
+    if country_rows:
+        top_country = country_rows[0]
+        observations.append(
+            f"Pais lider por facturacion: {top_country.get('Country', 'N/D')} ({float(top_country.get('Curr', 0) or 0):,.0f} EUR)."
+        )
+    if location_rows:
+        top_location = location_rows[0]
+        observations.append(
+            f"Ubicacion lider: {top_location.get('Ubicacion', 'N/D')} ({float(top_location.get('Curr', 0) or 0):,.0f} EUR)."
+        )
+
+    if summary.get("alertsCount", 0) > 0:
+        actions.append("Priorizar plan de recuperacion en hoteles de mayor impacto negativo y monitorizar semanalmente.")
+    if summary.get("growthCount", 0) > 0:
+        actions.append("Replicar palancas comerciales de los hoteles con mayor crecimiento en clusters comparables.")
+    if not actions:
+        actions.append("Mantener seguimiento mensual y revisar elasticidad por ubicacion y segmento.")
+
+    return {
+        "headline": headline,
+        "conclusions": conclusions[:3],
+        "observations": observations[:3],
+        "actions": actions[:3],
+    }
 
 def _safe_sheet_title(title: str) -> str:
     cleaned = "".join(ch for ch in title if ch not in "[]:*?/\\")
