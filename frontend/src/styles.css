@@ -485,17 +485,18 @@ th {
   grid-template-columns: 12px 1fr auto;
   align-items: center;
   gap: 8px;
-  border: 1px solid #334155 !important;
-  background: #1f2937 !important;
+  border: 1px solid #c7d4e8;
+  background: linear-gradient(180deg, #f7faff 0%, #edf3ff 100%);
   border-radius: 10px;
   padding: 6px 8px;
   font-size: 0.9rem;
-  color: #f8fafc !important;
+  color: #1f2a44;
   cursor: pointer;
 }
 
 .pie-legend-item:hover {
-  background: #111827 !important;
+  background: linear-gradient(180deg, #ecf3ff 0%, #dfeaff 100%);
+  border-color: #9fb7dd;
 }
 
 .pie-legend-item .dot {
@@ -505,11 +506,11 @@ th {
 }
 
 .pie-legend-label {
-  color: #f8fafc !important;
+  color: #1f2a44;
   font-weight: 700;
 }
 
 .pie-legend-pct {
-  color: #e2e8f0 !important;
+  color: #334155;
   font-weight: 700;
 }

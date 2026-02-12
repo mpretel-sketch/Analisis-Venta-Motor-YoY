@@ -712,10 +712,14 @@ def _build_ai_summary(
     heuristic = _build_ai_summary_heuristic(
         summary, alerts, growth, country_rows, location_rows, period_label
     )
-    llm = _build_ai_summary_llm(
+    llm, llm_error = _build_ai_summary_llm(
         summary, alerts, growth, country_rows, location_rows, period_label
     )
-    return llm or heuristic
+    if llm:
+        llm["llmFallbackReason"] = None
+        return llm
+    heuristic["llmFallbackReason"] = llm_error
+    return heuristic
 
 
 def _build_ai_summary_heuristic(
@@ -771,11 +775,25 @@ def _build_ai_summary_heuristic(
     if not actions:
         actions.append("Mantener seguimiento mensual y revisar elasticidad por ubicacion y segmento.")
 
+    risks = []
+    opportunities = []
+    if len(alerts):
+        risks.append("Concentracion de caida en pocos hoteles con impacto alto en margen.")
+    if summary.get("totalVarPct", 0) is not None and float(summary.get("totalVarPct", 0) or 0) < 0:
+        risks.append("Tendencia YoY negativa en el agregado; revisar pricing y mix por mercado.")
+    if len(growth):
+        opportunities.append("Escalar practicas comerciales de hoteles lideres en crecimiento.")
+    if country_rows:
+        opportunities.append("Profundizar en el pais lider para capturar demanda incremental.")
+
     return {
+        "source": "heuristic",
         "headline": headline,
-        "conclusions": conclusions[:3],
-        "observations": observations[:3],
-        "actions": actions[:3],
+        "conclusions": conclusions[:4],
+        "observations": observations[:4],
+        "risks": risks[:3],
+        "opportunities": opportunities[:3],
+        "actions": actions[:4],
     }
 
 
@@ -786,10 +804,10 @@ def _build_ai_summary_llm(
     country_rows: List[Dict],
     location_rows: List[Dict],
     period_label: str,
-) -> Optional[Dict]:
+) -> Tuple[Optional[Dict], Optional[str]]:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return None
+        return None, "missing_openai_api_key"
 
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "12"))
@@ -827,7 +845,7 @@ def _build_ai_summary_llm(
     system_prompt = (
         "Eres un analista financiero senior de revenue hotelero. "
         "Devuelve SOLO JSON valido con esta estructura exacta: "
-        '{"headline": string, "conclusions": string[<=3], "observations": string[<=3], "actions": string[<=3]}. ' 
+        '{"headline": string, "conclusions": string[<=4], "observations": string[<=4], "risks": string[<=3], "opportunities": string[<=3], "actions": string[<=4]}. '
         "Escribe en espanol neutro, directo y accionable para CFO."
     )
 
@@ -857,21 +875,26 @@ def _build_ai_summary_llm(
         raw = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
-            return None
+            return None, "invalid_llm_json"
         headline = str(parsed.get("headline", "")).strip()
         conclusions = [str(x).strip() for x in (parsed.get("conclusions") or []) if str(x).strip()]
         observations = [str(x).strip() for x in (parsed.get("observations") or []) if str(x).strip()]
+        risks = [str(x).strip() for x in (parsed.get("risks") or []) if str(x).strip()]
+        opportunities = [str(x).strip() for x in (parsed.get("opportunities") or []) if str(x).strip()]
         actions = [str(x).strip() for x in (parsed.get("actions") or []) if str(x).strip()]
         if not headline:
-            return None
+            return None, "empty_headline"
         return {
+            "source": "llm",
             "headline": headline,
-            "conclusions": conclusions[:3],
-            "observations": observations[:3],
-            "actions": actions[:3],
-        }
-    except Exception:
-        return None
+            "conclusions": conclusions[:4],
+            "observations": observations[:4],
+            "risks": risks[:3],
+            "opportunities": opportunities[:3],
+            "actions": actions[:4],
+        }, None
+    except Exception as exc:
+        return None, str(exc)
 
 def _safe_sheet_title(title: str) -> str:
     cleaned = "".join(ch for ch in title if ch not in "[]:*?/\\")

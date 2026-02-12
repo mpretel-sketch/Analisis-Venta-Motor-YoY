@@ -103,9 +103,9 @@ export default function App() {
   const [recoveryThreshold, setRecoveryThreshold] = useState(0);
   const [churnMonths, setChurnMonths] = useState(9);
   const [cohortMetric, setCohortMetric] = useState("active");
-  const [showCharts, setShowCharts] = useState(true);
-  const [showTopImpact, setShowTopImpact] = useState(true);
-  const [showSmartAlerts, setShowSmartAlerts] = useState(true);
+  const [showCharts, setShowCharts] = useState(false);
+  const [showTopImpact, setShowTopImpact] = useState(false);
+  const [showSmartAlerts, setShowSmartAlerts] = useState(false);
   const [compareEnabled, setCompareEnabled] = useState(false);
   const analyzeAbortRef = useRef(null);
   const analyzeRequestIdRef = useRef(0);
@@ -906,6 +906,67 @@ export default function App() {
             </div>
           </section>
 
+          {data.aiSummary && (
+            <section className="panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Resumen inteligente</h3>
+                  <p className="muted">Conclusiones ejecutivas automáticas del periodo.</p>
+                  <p className="tag">Fuente: {data.aiSummary.source === "llm" ? "ChatGPT" : "Fallback heurístico"}</p>
+                  {data.aiSummary.source !== "llm" && data.aiSummary.llmFallbackReason && (
+                    <p className="muted">LLM no disponible: {data.aiSummary.llmFallbackReason}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid">
+                <div className="chart">
+                  <h4>Headline</h4>
+                  <p>{data.aiSummary.headline}</p>
+                </div>
+                <div className="chart">
+                  <h4>Conclusiones</h4>
+                  <ul>
+                    {(data.aiSummary.conclusions || []).map((item, idx) => (
+                      <li key={`c-${idx}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="chart">
+                  <h4>Observaciones</h4>
+                  <ul>
+                    {(data.aiSummary.observations || []).map((item, idx) => (
+                      <li key={`o-${idx}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="chart">
+                  <h4>Riesgos clave</h4>
+                  <ul>
+                    {(data.aiSummary.risks || []).map((item, idx) => (
+                      <li key={`r-${idx}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="chart">
+                  <h4>Oportunidades</h4>
+                  <ul>
+                    {(data.aiSummary.opportunities || []).map((item, idx) => (
+                      <li key={`op-${idx}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="chart">
+                  <h4>Acciones sugeridas</h4>
+                  <ul>
+                    {(data.aiSummary.actions || []).map((item, idx) => (
+                      <li key={`a-${idx}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </section>
+          )}
+
           {compareEnabled && data.compare && !isSameComparator && (
             <section className="panel summary">
               <div>
@@ -1339,46 +1400,7 @@ export default function App() {
           </section>
 
 
-          {data.aiSummary && (
-            <section className="panel">
-              <div className="panel-head">
-                <div>
-                  <h3>Resumen inteligente</h3>
-                  <p className="muted">Conclusiones y observaciones automáticas del periodo.</p>
-                </div>
-              </div>
-              <div className="grid">
-                <div className="chart">
-                  <h4>Headline</h4>
-                  <p>{data.aiSummary.headline}</p>
-                </div>
-                <div className="chart">
-                  <h4>Conclusiones</h4>
-                  <ul>
-                    {(data.aiSummary.conclusions || []).map((item, idx) => (
-                      <li key={`c-${idx}`}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="chart">
-                  <h4>Observaciones</h4>
-                  <ul>
-                    {(data.aiSummary.observations || []).map((item, idx) => (
-                      <li key={`o-${idx}`}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="chart">
-                  <h4>Acciones sugeridas</h4>
-                  <ul>
-                    {(data.aiSummary.actions || []).map((item, idx) => (
-                      <li key={`a-${idx}`}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </section>
-          )}
+
 
           <Table
             title="Análisis por ubicación"
