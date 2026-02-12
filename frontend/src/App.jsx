@@ -28,13 +28,32 @@ const percent = (value) =>
     ? "—"
     : `${value.toFixed(1)}%`;
 
-const Table = ({ title, rows, columns, limit = 10, onRowClick }) => {
+const integer = (value) =>
+  new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 }).format(value ?? 0);
+
+const normalizeThousandsInText = (text) =>
+  String(text || "")
+    .replace(/\b\d{1,3}(?:,\d{3})+\b/g, (m) => m.replace(/,/g, "."))
+    .replace(/\b\d{4,}\b/g, (m) => integer(Number(m)));
+
+const Table = ({ title, rows, columns, limit = 10, onRowClick, defaultOpen = true }) => {
   const [expanded, setExpanded] = useState(false);
+  const [visible, setVisible] = useState(defaultOpen);
+
   if (!rows?.length) {
     return (
       <section className="panel">
-        <h3>{title}</h3>
-        <p className="muted">Sin registros.</p>
+        <div className="panel-head">
+          <h3>{title}</h3>
+          <button
+            type="button"
+            className="ghost small"
+            onClick={() => setVisible((prev) => !prev)}
+          >
+            {visible ? "Ocultar" : "Mostrar"}
+          </button>
+        </div>
+        {visible && <p className="muted">Sin registros.</p>}
       </section>
     );
   }
@@ -45,40 +64,51 @@ const Table = ({ title, rows, columns, limit = 10, onRowClick }) => {
     <section className="panel">
       <div className="panel-head">
         <h3>{title}</h3>
-        {rows.length > limit && (
+        <div className="actions">
+          {rows.length > limit && visible && (
+            <button
+              type="button"
+              className="ghost small"
+              onClick={() => setExpanded((prev) => !prev)}
+            >
+              {expanded ? "Mostrar menos" : `Mostrar todo (${rows.length})`}
+            </button>
+          )}
           <button
             type="button"
             className="ghost small"
-            onClick={() => setExpanded((prev) => !prev)}
+            onClick={() => setVisible((prev) => !prev)}
           >
-            {expanded ? "Mostrar menos" : `Mostrar todo (${rows.length})`}
+            {visible ? "Ocultar" : "Mostrar"}
           </button>
-        )}
+        </div>
       </div>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              {columns.map((col) => (
-                <th key={col.key}>{col.label}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((row, idx) => (
-              <tr
-                key={`${row.Cliente}-${idx}`}
-                className={onRowClick ? "row-clickable" : undefined}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-              >
+      {visible && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
                 {columns.map((col) => (
-                  <td key={col.key}>{col.render(row)}</td>
+                  <th key={col.key}>{col.label}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {shown.map((row, idx) => (
+                <tr
+                  key={`${row.Cliente}-${idx}`}
+                  className={onRowClick ? "row-clickable" : undefined}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                >
+                  {columns.map((col) => (
+                    <td key={col.key}>{col.render(row)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 };
@@ -107,6 +137,14 @@ export default function App() {
   const [showTopImpact, setShowTopImpact] = useState(false);
   const [showSmartAlerts, setShowSmartAlerts] = useState(false);
   const [compareEnabled, setCompareEnabled] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
+  const [showMainSummary, setShowMainSummary] = useState(true);
+  const [showAiSummary, setShowAiSummary] = useState(true);
+  const [showCompareSummary, setShowCompareSummary] = useState(true);
+  const [showClusters, setShowClusters] = useState(true);
+  const [showChurn, setShowChurn] = useState(true);
+  const [showCohorts, setShowCohorts] = useState(true);
+  const [showDistribution, setShowDistribution] = useState(true);
   const analyzeAbortRef = useRef(null);
   const analyzeRequestIdRef = useRef(0);
 
@@ -788,21 +826,31 @@ export default function App() {
           <section className="panel filters">
             <div className="panel-head">
               <h3>Filtros</h3>
-              <button
-                type="button"
-                className="ghost small"
-                onClick={() => {
-                  setSearch("");
-                  setLocation("all");
-                  setImpactMin("");
-                  setImpactMax("");
-                  setVarMin("");
-                  setVarMax("");
-                }}
-              >
-                Limpiar filtros
-              </button>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="ghost small"
+                  onClick={() => {
+                    setSearch("");
+                    setLocation("all");
+                    setImpactMin("");
+                    setImpactMax("");
+                    setVarMin("");
+                    setVarMax("");
+                  }}
+                >
+                  Limpiar filtros
+                </button>
+                <button
+                  type="button"
+                  className="ghost small"
+                  onClick={() => setShowFilters((prev) => !prev)}
+                >
+                  {showFilters ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
             </div>
+            {showFilters && (
             <div className="filter-grid">
               <label>
                 <span>Búsqueda hotel / code</span>
@@ -887,14 +935,25 @@ export default function App() {
                 </select>
               </label>
             </div>
+            )}
           </section>
 
           <section className="panel summary">
-            <div>
+            <div className="panel-head">
+              <h3>Comparativa principal</h3>
+              <button
+                type="button"
+                className="ghost small"
+                onClick={() => setShowMainSummary((prev) => !prev)}
+              >
+                {showMainSummary ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+            {showMainSummary && (
+            <>
               <p className="muted">Comparativa principal</p>
               <h2>{data.meta.periodLabel || data.meta.pairLabel}</h2>
               <p className="tag">{data.meta.mode?.toUpperCase()} · {data.meta.monthKey}</p>
-            </div>
             <div className="summary-grid">
               <div>
                 <span>Facturación año anterior</span>
@@ -933,6 +992,8 @@ export default function App() {
                 <small>{currency(data.summary.lostRevenue)} perdida</small>
               </div>
             </div>
+            </>
+            )}
           </section>
 
           {data.aiSummary && (
@@ -946,13 +1007,21 @@ export default function App() {
                     <p className="muted">Gemini no disponible: {data.aiSummary.llmFallbackReason}</p>
                   )}
                 </div>
+                <button
+                  type="button"
+                  className="ghost small"
+                  onClick={() => setShowAiSummary((prev) => !prev)}
+                >
+                  {showAiSummary ? "Ocultar" : "Mostrar"}
+                </button>
               </div>
+              {showAiSummary && (
               <div className="grid">
                 <div className="chart">
                   <h4>Conclusiones</h4>
                   <ul>
                     {(data.aiSummary.conclusions || []).map((item, idx) => (
-                      <li key={`c-${idx}`}>{item}</li>
+                      <li key={`c-${idx}`}>{normalizeThousandsInText(item)}</li>
                     ))}
                   </ul>
                 </div>
@@ -960,7 +1029,7 @@ export default function App() {
                   <h4>Observaciones</h4>
                   <ul>
                     {(data.aiSummary.observations || []).map((item, idx) => (
-                      <li key={`o-${idx}`}>{item}</li>
+                      <li key={`o-${idx}`}>{normalizeThousandsInText(item)}</li>
                     ))}
                   </ul>
                 </div>
@@ -968,7 +1037,7 @@ export default function App() {
                   <h4>Riesgos clave</h4>
                   <ul>
                     {(data.aiSummary.risks || []).map((item, idx) => (
-                      <li key={`r-${idx}`}>{item}</li>
+                      <li key={`r-${idx}`}>{normalizeThousandsInText(item)}</li>
                     ))}
                   </ul>
                 </div>
@@ -976,7 +1045,7 @@ export default function App() {
                   <h4>Oportunidades</h4>
                   <ul>
                     {(data.aiSummary.opportunities || []).map((item, idx) => (
-                      <li key={`op-${idx}`}>{item}</li>
+                      <li key={`op-${idx}`}>{normalizeThousandsInText(item)}</li>
                     ))}
                   </ul>
                 </div>
@@ -984,16 +1053,29 @@ export default function App() {
                   <h4>Acciones sugeridas</h4>
                   <ul>
                     {(data.aiSummary.actions || []).map((item, idx) => (
-                      <li key={`a-${idx}`}>{item}</li>
+                      <li key={`a-${idx}`}>{normalizeThousandsInText(item)}</li>
                     ))}
                   </ul>
                 </div>
               </div>
+              )}
             </section>
           )}
 
           {compareEnabled && data.compare && !isSameComparator && (
             <section className="panel summary">
+              <div className="panel-head">
+                <h3>Comparador de periodos</h3>
+                <button
+                  type="button"
+                  className="ghost small"
+                  onClick={() => setShowCompareSummary((prev) => !prev)}
+                >
+                  {showCompareSummary ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
+              {showCompareSummary && (
+              <>
               <div>
                 <p className="muted">Comparador de periodos</p>
                 <h2>{data.compare.meta.periodLabel || data.compare.meta.pairLabel}</h2>
@@ -1037,6 +1119,8 @@ export default function App() {
                   <small>{currency(data.compare.summary.lostRevenue)} perdida</small>
                 </div>
               </div>
+              </>
+              )}
             </section>
           )}
           <section className="panel">
@@ -1239,7 +1323,9 @@ export default function App() {
               <div>
                 <h3>Consolidación por cluster</h3>
               </div>
+              <button type="button" className="ghost small" onClick={() => setShowClusters((prev) => !prev)}>{showClusters ? "Ocultar" : "Mostrar"}</button>
             </div>
+            {showClusters && (
             <div className="grid">
               <Table
                 title="Por cluster"
@@ -1267,6 +1353,7 @@ export default function App() {
                 />
               )}
             </div>
+            )}
           </section>
 
 
@@ -1276,17 +1363,20 @@ export default function App() {
                 <h3>Churn</h3>
                 <p className="muted">Hoteles sin ventas durante {churnMonths} meses o más.</p>
               </div>
+              <button type="button" className="ghost small" onClick={() => setShowChurn((prev) => !prev)}>{showChurn ? "Ocultar" : "Mostrar"}</button>
             </div>
+            {showChurn && (
             <Table
               title="Hoteles en churn"
               rows={(data.churn || []).sort((a, b) => (b.MonthsInactive || 0) - (a.MonthsInactive || 0))}
               columns={[
                 { key: 'Cliente', label: 'Hotel', render: (row) => row.Cliente },
                 { key: 'Ubicacion', label: 'Ubicación', render: (row) => row.Ubicacion ?? '—' },
-                { key: 'MonthsInactive', label: 'Meses sin ventas', render: (row) => row.MonthsInactive },
+                { key: 'MonthsInactive', label: 'Meses sin ventas', render: (row) => integer(row.MonthsInactive) },
               ]}
               onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })}
             />
+            )}
           </section>
 
           <section className="panel">
@@ -1295,6 +1385,8 @@ export default function App() {
                 <h3>Cohortes</h3>
                 <p className="muted">Tipos comunes: adquisición, comportamiento y predictivas.</p>
               </div>
+              <div className="actions">
+                <button type="button" className="ghost small" onClick={() => setShowCohorts((prev) => !prev)}>{showCohorts ? "Ocultar" : "Mostrar"}</button>
               <div className="cohort-controls">
                 <label>
                   <span>Vista</span>
@@ -1304,7 +1396,9 @@ export default function App() {
                   </select>
                 </label>
               </div>
+              </div>
             </div>
+            {showCohorts && (
             <div className="table-wrap">
               <table className="cohort-table">
                 <thead>
@@ -1320,7 +1414,7 @@ export default function App() {
                   {(data.cohorts?.rows || []).map((row) => (
                     <tr key={row.cohort}>
                       <td>{row.cohort}</td>
-                      <td>{row.size}</td>
+                      <td>{integer(row.size)}</td>
                       {(data.cohorts?.columns || []).map((_, idx) => {
                         const values = cohortMetric === 'active' ? row.active : row.revenue;
                         const value = values ? values[idx] : null;
@@ -1338,6 +1432,7 @@ export default function App() {
                 </tbody>
               </table>
             </div>
+            )}
           </section>
 
           <section className="panel">
@@ -1345,7 +1440,9 @@ export default function App() {
               <div>
                 <h3>Distribución por ubicación y país</h3>
               </div>
+              <button type="button" className="ghost small" onClick={() => setShowDistribution((prev) => !prev)}>{showDistribution ? "Ocultar" : "Mostrar"}</button>
             </div>
+            {showDistribution && (
             <div className="grid">
               <div className="chart">
                 <h4>Ubicación</h4>
@@ -1422,6 +1519,7 @@ export default function App() {
                 </div>
               </div>
             </div>
+            )}
           </section>
 
 
