@@ -712,7 +712,7 @@ def _build_ai_summary(
     heuristic = _build_ai_summary_heuristic(
         summary, alerts, growth, country_rows, location_rows, period_label
     )
-    llm, llm_error = _build_ai_summary_llm(
+    llm, llm_error = _build_ai_summary_gemini(
         summary, alerts, growth, country_rows, location_rows, period_label
     )
     if llm:
@@ -797,7 +797,7 @@ def _build_ai_summary_heuristic(
     }
 
 
-def _build_ai_summary_llm(
+def _build_ai_summary_gemini(
     summary: Dict,
     alerts: pd.DataFrame,
     growth: pd.DataFrame,
@@ -805,12 +805,12 @@ def _build_ai_summary_llm(
     location_rows: List[Dict],
     period_label: str,
 ) -> Tuple[Optional[Dict], Optional[str]]:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        return None, "missing_openai_api_key"
+        return None, "missing_gemini_api_key"
 
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "12"))
+    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "8"))
 
     payload = {
         "period": period_label,
@@ -842,50 +842,75 @@ def _build_ai_summary_llm(
         "topLocations": location_rows[:5],
     }
 
-    system_prompt = (
+    prompt = (
         "Eres un analista financiero senior de revenue hotelero. "
-        "Devuelve SOLO JSON valido con esta estructura exacta: "
-        '{"headline": string, "conclusions": string[<=4], "observations": string[<=4], "risks": string[<=3], "opportunities": string[<=3], "actions": string[<=4]}. '
-        "Escribe en espanol neutro, directo y accionable para CFO."
+        "Responde SOLO con JSON valido con esta estructura exacta: "
+        '{"headline": string, "conclusions": string[<=4], "observations": string[<=4], '
+        '"risks": string[<=3], "opportunities": string[<=3], "actions": string[<=4]}. '
+        "Escribe en espanol neutro, directo y accionable para CFO. "
+        "Datos de entrada: " + json.dumps(payload, ensure_ascii=True)
     )
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     try:
         response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
+            url,
+            headers={"Content-Type": "application/json"},
             json={
-                "model": model,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": system_prompt},
+                "contents": [
                     {
                         "role": "user",
-                        "content": json.dumps(payload, ensure_ascii=True),
-                    },
+                        "parts": [{"text": prompt}],
+                    }
                 ],
-                "temperature": 0.2,
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "responseMimeType": "application/json",
+                },
             },
             timeout=timeout,
         )
         response.raise_for_status()
         data = response.json()
-        raw = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        parsed = json.loads(raw)
+
+        candidates = data.get("candidates") or []
+        if not candidates:
+            return None, "no_gemini_candidates"
+
+        parts = (((candidates[0] or {}).get("content") or {}).get("parts") or [])
+        raw = ""
+        for part in parts:
+            if isinstance(part, dict) and part.get("text"):
+                raw += str(part["text"])
+
+        raw = raw.strip()
+        if not raw:
+            return None, "empty_gemini_response"
+
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            m = re.search(r"\{.*\}", raw, flags=re.S)
+            if not m:
+                return None, "invalid_gemini_json"
+            parsed = json.loads(m.group(0))
+
         if not isinstance(parsed, dict):
-            return None, "invalid_llm_json"
+            return None, "invalid_gemini_json"
+
         headline = str(parsed.get("headline", "")).strip()
         conclusions = [str(x).strip() for x in (parsed.get("conclusions") or []) if str(x).strip()]
         observations = [str(x).strip() for x in (parsed.get("observations") or []) if str(x).strip()]
         risks = [str(x).strip() for x in (parsed.get("risks") or []) if str(x).strip()]
         opportunities = [str(x).strip() for x in (parsed.get("opportunities") or []) if str(x).strip()]
         actions = [str(x).strip() for x in (parsed.get("actions") or []) if str(x).strip()]
+
         if not headline:
             return None, "empty_headline"
+
         return {
-            "source": "llm",
+            "source": "gemini",
             "headline": headline,
             "conclusions": conclusions[:4],
             "observations": observations[:4],

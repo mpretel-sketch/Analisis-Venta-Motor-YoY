@@ -296,6 +296,13 @@ export default function App() {
   }, [countryPieData]);
 
   useEffect(() => {
+    // Warm backend once to reduce first analyze latency (cold starts on free tier).
+    const ctrl = new AbortController();
+    fetch(`${API_BASE}/api/health`, { signal: ctrl.signal }).catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+
+  useEffect(() => {
     if (data?.meta?.monthKey && !monthKey) {
       setMonthKey(data.meta.monthKey);
     }
@@ -912,9 +919,9 @@ export default function App() {
                 <div>
                   <h3>Resumen inteligente</h3>
                   <p className="muted">Conclusiones ejecutivas automáticas del periodo.</p>
-                  <p className="tag">Fuente: {data.aiSummary.source === "llm" ? "ChatGPT" : "Fallback heurístico"}</p>
-                  {data.aiSummary.source !== "llm" && data.aiSummary.llmFallbackReason && (
-                    <p className="muted">LLM no disponible: {data.aiSummary.llmFallbackReason}</p>
+                  <p className="tag">Fuente: {data.aiSummary.source === "gemini" ? "Gemini" : "Fallback heurístico"}</p>
+                  {data.aiSummary.source !== "gemini" && data.aiSummary.llmFallbackReason && (
+                    <p className="muted">Gemini no disponible: {data.aiSummary.llmFallbackReason}</p>
                   )}
                 </div>
               </div>
