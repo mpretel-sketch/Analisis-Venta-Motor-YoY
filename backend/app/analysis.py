@@ -809,8 +809,8 @@ def _build_ai_summary_gemini(
     if not api_key:
         return None, "missing_gemini_api_key"
 
-    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-    timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "8"))
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "12"))
 
     payload = {
         "period": period_label,
@@ -828,7 +828,7 @@ def _build_ai_summary_gemini(
                 "impact": float(row.get("Var_Absoluta", 0) or 0),
                 "varPct": float(row.get("Var_%", 0) or 0),
             }
-            for _, row in alerts.head(5).iterrows()
+            for _, row in alerts.head(3).iterrows()
         ],
         "topGrowth": [
             {
@@ -836,10 +836,10 @@ def _build_ai_summary_gemini(
                 "impact": float(row.get("Var_Absoluta", 0) or 0),
                 "varPct": float(row.get("Var_%", 0) or 0),
             }
-            for _, row in growth.head(5).iterrows()
+            for _, row in growth.head(3).iterrows()
         ],
-        "topCountries": country_rows[:5],
-        "topLocations": location_rows[:5],
+        "topCountries": country_rows[:3],
+        "topLocations": location_rows[:3],
     }
 
     prompt = (
