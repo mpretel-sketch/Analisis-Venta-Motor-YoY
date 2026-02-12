@@ -489,7 +489,8 @@ th {
   background: #fff;
   border-radius: 10px;
   padding: 6px 8px;
-  font-size: 0.88rem;
+  font-size: 0.9rem;
+  color: #1b1b1f;
   cursor: pointer;
 }
 
@@ -501,4 +502,14 @@ th {
   width: 10px;
   height: 10px;
   border-radius: 50%;
+}
+
+.pie-legend-label {
+  color: #1b1b1f;
+  font-weight: 700;
+}
+
+.pie-legend-pct {
+  color: #334155;
+  font-weight: 700;
 }

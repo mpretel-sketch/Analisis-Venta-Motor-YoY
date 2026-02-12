@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
+import os
+import json
 import hashlib
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple
@@ -10,6 +12,7 @@ import re
 
 import numpy as np
 import pandas as pd
+import requests
 
 
 MONTH_MAP = {
@@ -706,6 +709,23 @@ def _build_ai_summary(
     location_rows: List[Dict],
     period_label: str,
 ) -> Dict:
+    heuristic = _build_ai_summary_heuristic(
+        summary, alerts, growth, country_rows, location_rows, period_label
+    )
+    llm = _build_ai_summary_llm(
+        summary, alerts, growth, country_rows, location_rows, period_label
+    )
+    return llm or heuristic
+
+
+def _build_ai_summary_heuristic(
+    summary: Dict,
+    alerts: pd.DataFrame,
+    growth: pd.DataFrame,
+    country_rows: List[Dict],
+    location_rows: List[Dict],
+    period_label: str,
+) -> Dict:
     total_var_pct = float(summary.get("totalVarPct", 0.0) or 0.0)
     total_var = float(summary.get("totalVar", 0.0) or 0.0)
     headline = (
@@ -757,6 +777,101 @@ def _build_ai_summary(
         "observations": observations[:3],
         "actions": actions[:3],
     }
+
+
+def _build_ai_summary_llm(
+    summary: Dict,
+    alerts: pd.DataFrame,
+    growth: pd.DataFrame,
+    country_rows: List[Dict],
+    location_rows: List[Dict],
+    period_label: str,
+) -> Optional[Dict]:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "12"))
+
+    payload = {
+        "period": period_label,
+        "summary": {
+            "totalPrev": float(summary.get("totalPrev", 0) or 0),
+            "totalCurr": float(summary.get("totalCurr", 0) or 0),
+            "totalVar": float(summary.get("totalVar", 0) or 0),
+            "totalVarPct": float(summary.get("totalVarPct", 0) or 0),
+            "alertsCount": int(summary.get("alertsCount", 0) or 0),
+            "growthCount": int(summary.get("growthCount", 0) or 0),
+        },
+        "topAlerts": [
+            {
+                "hotel": str(row.get("Cliente", "N/D")),
+                "impact": float(row.get("Var_Absoluta", 0) or 0),
+                "varPct": float(row.get("Var_%", 0) or 0),
+            }
+            for _, row in alerts.head(5).iterrows()
+        ],
+        "topGrowth": [
+            {
+                "hotel": str(row.get("Cliente", "N/D")),
+                "impact": float(row.get("Var_Absoluta", 0) or 0),
+                "varPct": float(row.get("Var_%", 0) or 0),
+            }
+            for _, row in growth.head(5).iterrows()
+        ],
+        "topCountries": country_rows[:5],
+        "topLocations": location_rows[:5],
+    }
+
+    system_prompt = (
+        "Eres un analista financiero senior de revenue hotelero. "
+        "Devuelve SOLO JSON valido con esta estructura exacta: "
+        '{"headline": string, "conclusions": string[<=3], "observations": string[<=3], "actions": string[<=3]}. ' 
+        "Escribe en espanol neutro, directo y accionable para CFO."
+    )
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": json.dumps(payload, ensure_ascii=True),
+                    },
+                ],
+                "temperature": 0.2,
+            },
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        raw = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return None
+        headline = str(parsed.get("headline", "")).strip()
+        conclusions = [str(x).strip() for x in (parsed.get("conclusions") or []) if str(x).strip()]
+        observations = [str(x).strip() for x in (parsed.get("observations") or []) if str(x).strip()]
+        actions = [str(x).strip() for x in (parsed.get("actions") or []) if str(x).strip()]
+        if not headline:
+            return None
+        return {
+            "headline": headline,
+            "conclusions": conclusions[:3],
+            "observations": observations[:3],
+            "actions": actions[:3],
+        }
+    except Exception:
+        return None
 
 def _safe_sheet_title(title: str) -> str:
     cleaned = "".join(ch for ch in title if ch not in "[]:*?/\\")

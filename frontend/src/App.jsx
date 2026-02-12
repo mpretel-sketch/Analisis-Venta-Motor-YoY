@@ -180,13 +180,13 @@ export default function App() {
 
   const pieColors = [
     "#516BA6",
-    "#0f6b6e",
-    "#c94b2a",
-    "#7a5c3e",
-    "#3f4a5a",
-    "#9c6d4e",
-    "#8aa0a6",
-    "#bfa27a",
+    "#0F766E",
+    "#D9480F",
+    "#8B5E34",
+    "#334155",
+    "#B45309",
+    "#0EA5A8",
+    "#9F1239",
   ];
 
   const countryNameMap = {
@@ -1292,8 +1292,8 @@ export default function App() {
                       onClick={() => applyFiltersAndReload({ location: row.filterValue || "all" })}
                     >
                       <span className="dot" style={{ backgroundColor: row.color }} />
-                      <span>{row.label}</span>
-                      <span>{row.pct.toFixed(1)}%</span>
+                      <span className="pie-legend-label">{row.label}</span>
+                      <span className="pie-legend-pct">{row.pct.toFixed(1)}%</span>
                     </button>
                   ))}
                 </div>
@@ -1329,8 +1329,8 @@ export default function App() {
                       onClick={() => applyFiltersAndReload({ search: row.filterValue || "" })}
                     >
                       <span className="dot" style={{ backgroundColor: row.color }} />
-                      <span>{row.label}</span>
-                      <span>{row.pct.toFixed(1)}%</span>
+                      <span className="pie-legend-label">{row.label}</span>
+                      <span className="pie-legend-pct">{row.pct.toFixed(1)}%</span>
                     </button>
                   ))}
                 </div>
