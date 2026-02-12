@@ -44,8 +44,10 @@ const DEFAULT_PANEL_ORDER = [
   "trend",
   "top-impact",
   "smart-alerts",
-  "tables-main",
-  "tables-new-lost",
+  "table-alerts",
+  "table-growth",
+  "table-new",
+  "table-lost",
   "clusters",
   "churn",
   "cohorts",
@@ -53,9 +55,9 @@ const DEFAULT_PANEL_ORDER = [
   "location-analysis",
 ];
 
-const DraggableBlock = ({ id, order, dragId, onDragStart, onDragOver, onDrop, children }) => (
+const DraggableBlock = ({ id, order, dragId, onDragStart, onDragOver, onDrop, className = "", children }) => (
   <div
-    className={`draggable-block${dragId === id ? " is-dragging" : ""}`}
+    className={`draggable-block${className ? ` ${className}` : ""}${dragId === id ? " is-dragging" : ""}`}
     style={{ order }}
     draggable
     onDragStart={() => onDragStart(id)}
@@ -1433,18 +1435,20 @@ export default function App() {
           </section>
           </DraggableBlock>
 
-          <DraggableBlock id="tables-main" order={getPanelOrder("tables-main")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
-          <div className="grid">
+          <DraggableBlock id="table-alerts" className="half" order={getPanelOrder("table-alerts")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
             <Table title="Alertas" rows={data.tables.alerts} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
-            <Table title="Crecimientos" rows={data.tables.growth} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
-          </div>
           </DraggableBlock>
 
-          <DraggableBlock id="tables-new-lost" order={getPanelOrder("tables-new-lost")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
-          <div className="grid">
+          <DraggableBlock id="table-growth" className="half" order={getPanelOrder("table-growth")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
+            <Table title="Crecimientos" rows={data.tables.growth} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
+          </DraggableBlock>
+
+          <DraggableBlock id="table-new" className="half" order={getPanelOrder("table-new")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
             <Table title="Hoteles nuevos" rows={data.tables.new} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
+          </DraggableBlock>
+
+          <DraggableBlock id="table-lost" className="half" order={getPanelOrder("table-lost")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
             <Table title="Hoteles perdidos" rows={data.tables.lost} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
-          </div>
           </DraggableBlock>
 
           <DraggableBlock id="clusters" order={getPanelOrder("clusters")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
