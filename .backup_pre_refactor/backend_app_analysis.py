@@ -13,12 +13,8 @@ import re
 import numpy as np
 import pandas as pd
 import requests
-import logging
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 
-
-logger = logging.getLogger(__name__)
 MONTH_MAP = {
     "ene": 1,
     "feb": 2,
@@ -829,25 +825,6 @@ def _default_actionable_filters(
     return items[:5]
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type((requests.exceptions.RequestException, requests.exceptions.Timeout)),
-    reraise=True
-)
-def _call_gemini_api(url: str, payload: dict, timeout: tuple) -> dict:
-    """Call Gemini API with retry logic."""
-    logger.info(f"Calling Gemini API (model in URL), timeout={timeout}")
-    response = requests.post(
-        url,
-        headers={"Content-Type": "application/json"},
-        json=payload,
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
 def _build_ai_summary_gemini(
     summary: Dict,
     alerts: pd.DataFrame,
@@ -858,11 +835,10 @@ def _build_ai_summary_gemini(
 ) -> Tuple[Optional[Dict], Optional[str]]:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        logger.warning("GEMINI_API_KEY not found in environment")
         return None, "missing_gemini_api_key"
 
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "12"))
+    timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "6"))
 
     payload = {
         "period": period_label,
@@ -950,7 +926,6 @@ def _build_ai_summary_gemini(
 
         raw = raw.strip()
         if not raw:
-            logger.warning("Gemini returned empty response")
             return None, "empty_gemini_response"
 
         try:
@@ -964,7 +939,6 @@ def _build_ai_summary_gemini(
         if not isinstance(parsed, dict):
             return None, "invalid_gemini_json"
 
-        logger.info("Successfully parsed Gemini response")
         headline = str(parsed.get("headline", "")).strip()
         conclusions = [str(x).strip() for x in (parsed.get("conclusions") or []) if str(x).strip()]
         observations = [str(x).strip() for x in (parsed.get("observations") or []) if str(x).strip()]

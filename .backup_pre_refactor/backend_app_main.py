@@ -3,8 +3,6 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 from typing import Optional
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import os
 
 from dotenv import load_dotenv
@@ -34,9 +32,6 @@ from .analysis import AnalysisError, analyze_yoy, build_excel_report_bytes, buil
 from .netsuite_client import get_netsuite_client, NetSuiteError, dataframe_to_excel_format
 
 app = FastAPI(title="Early Warning YoY")
-
-# Thread pool for CPU-bound operations
-executor = ThreadPoolExecutor(max_workers=4)
 
 app.add_middleware(
     CORSMiddleware,
@@ -77,11 +72,7 @@ async def analyze(
 ):
     try:
         file_bytes = await file.read()
-        logger.info(f"Starting analysis for file: {file.filename}")
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            executor,
-            analyze_yoy,
+        result = analyze_yoy(
             file_bytes,
             file.filename,
             alert_threshold=alert_threshold or -30.0,
@@ -97,12 +88,8 @@ async def analyze(
             recovery_threshold=recovery_threshold,
             churn_months=churn_months or 9,
         )
-        logger.info(f"Analysis completed for {file.filename}")
         if compare_mode:
-            loop = asyncio.get_event_loop()
-            compare = await loop.run_in_executor(
-                executor,
-                analyze_yoy,
+            compare = analyze_yoy(
                 file_bytes,
                 file.filename,
                 alert_threshold=alert_threshold or -30.0,
@@ -118,7 +105,6 @@ async def analyze(
                 recovery_threshold=recovery_threshold,
                 churn_months=churn_months or 9,
             )
-            logger.info(f"Analysis completed for {file.filename}")
             result["compare"] = compare
         return JSONResponse(content=_sanitize_json(result))
     except AnalysisError as exc:
@@ -244,13 +230,9 @@ async def analyze_netsuite(
             ) from exc
 
         # Usar la misma lógica de análisis que el endpoint original
-        logger.info(f"Starting analysis for file: {file.filename}")
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            executor,
-            analyze_yoy,
+        result = analyze_yoy(
             file_bytes,
-            file.filename,
+            "netsuite_data.xlsx",  # Nombre ficticio
             alert_threshold=alert_threshold or -30.0,
             mode=(mode or "month"),
             month_key=month_key,
@@ -264,16 +246,12 @@ async def analyze_netsuite(
             recovery_threshold=recovery_threshold,
             churn_months=churn_months or 9,
         )
-        logger.info(f"Analysis completed for {file.filename}")
 
         # Si hay modo de comparación, ejecutarlo
         if compare_mode:
-            loop = asyncio.get_event_loop()
-            compare = await loop.run_in_executor(
-                executor,
-                analyze_yoy,
+            compare = analyze_yoy(
                 file_bytes,
-                file.filename,
+                "netsuite_data.xlsx",
                 alert_threshold=alert_threshold or -30.0,
                 mode=compare_mode,
                 month_key=compare_month_key,
@@ -286,7 +264,6 @@ async def analyze_netsuite(
                 persist_threshold=persist_threshold,
                 recovery_threshold=recovery_threshold,
             )
-            logger.info(f"Analysis completed for {file.filename}")
             result["compare"] = compare
 
         return JSONResponse(content=_sanitize_json(result))
