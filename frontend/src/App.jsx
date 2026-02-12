@@ -820,147 +820,168 @@ export default function App() {
         </div>
         <div className="hero-card">
           <form onSubmit={handleAnalyze}>
-            <div
-              className={`file-dropzone${isFileDragOver ? " is-over" : ""}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsFileDragOver(true);
-              }}
-              onDragLeave={() => setIsFileDragOver(false)}
-              onDrop={handleDropFile}
-            >
-              <label className="file">
-                <span>Archivo Excel (.xls o .xlsx)</span>
-                <input
-                  type="file"
-                  accept=".xls,.xlsx"
-                  onChange={(e) => setFile(e.target.files[0])}
-                />
-                <span className="file-name">
-                  {file ? file.name : "Selecciona un archivo o arrástralo aquí"}
-                </span>
-              </label>
-            </div>
-            <label className="threshold">
-              <span>
-                Modo de análisis{" "}
-                <span
-                  className="help"
-                  title="Mes: compara un mes con su mismo mes del año anterior. YTD: enero-hasta el mes elegido vs año anterior. Rolling: últimos 3/6 meses vs mismos meses del año anterior."
+            <div className="hero-top-layout">
+              <section className="hero-upload-panel">
+                <div
+                  className={`file-dropzone hero-dropzone${isFileDragOver ? " is-over" : ""}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsFileDragOver(true);
+                  }}
+                  onDragLeave={() => setIsFileDragOver(false)}
+                  onDrop={handleDropFile}
                 >
-                  ?
-                </span>
-              </span>
-              <select value={mode} onChange={(e) => setMode(e.target.value)}>
-                <option value="month">Último mes</option>
-                <option value="ytd">YTD (año a la fecha)</option>
-                <option value="rolling3">Rolling 3 meses</option>
-                <option value="rolling6">Rolling 6 meses</option>
-              </select>
-            </label>
-            <label className="threshold">
-              <span>Mes de referencia</span>
-              <select
-                value={monthKey ?? ""}
-                onChange={(e) => setMonthKey(e.target.value || null)}
-                disabled={!data?.meta?.availableMonths?.length}
-              >
-                {!data?.meta?.availableMonths?.length && (
-                  <option value="">Analiza primero</option>
+                  <div className="hero-upload-title">Subida de archivo</div>
+                  <p className="hero-upload-note">Arrastra tu Excel (.xls, .xlsx) o selecciónalo manualmente.</p>
+                  <label className="file">
+                    <span>Archivo fuente</span>
+                    <input
+                      type="file"
+                      accept=".xls,.xlsx"
+                      onChange={(e) => setFile(e.target.files[0])}
+                    />
+                  </label>
+                  <span className="file-name hero-file-pill">
+                    {file ? `Cargado: ${file.name}` : "Ningún archivo seleccionado"}
+                  </span>
+                </div>
+
+                <div className="hero-actions">
+                  <button type="submit" disabled={!file || loading}>
+                    {loading ? "Analizando..." : "Analizar"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={handleDownload}
+                    disabled={!file || loading}
+                  >
+                    Excel
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={handleExportCurrentViewPdf}
+                    disabled={!data || pdfLoading}
+                  >
+                    {pdfLoading ? "Generando PDF..." : "PDF"}
+                  </button>
+                  <button
+                    type="button"
+                    className="tertiary"
+                    disabled={true}
+                    title="Obtener datos directamente desde NetSuite"
+                  >
+                    Analizar desde NetSuite
+                  </button>
+                </div>
+              </section>
+
+              <section className="hero-controls-panel">
+                <div className="hero-params-grid">
+                  <label className="threshold">
+                    <span>
+                      Modo de análisis{" "}
+                      <span
+                        className="help"
+                        title="Mes: compara un mes con su mismo mes del año anterior. YTD: enero-hasta el mes elegido vs año anterior. Rolling: últimos 3/6 meses vs mismos meses del año anterior."
+                      >
+                        ?
+                      </span>
+                    </span>
+                    <select value={mode} onChange={(e) => setMode(e.target.value)}>
+                      <option value="month">Último mes</option>
+                      <option value="ytd">YTD (año a la fecha)</option>
+                      <option value="rolling3">Rolling 3 meses</option>
+                      <option value="rolling6">Rolling 6 meses</option>
+                    </select>
+                  </label>
+
+                  <label className="threshold">
+                    <span>Mes de referencia</span>
+                    <select
+                      value={monthKey ?? ""}
+                      onChange={(e) => setMonthKey(e.target.value || null)}
+                      disabled={!data?.meta?.availableMonths?.length}
+                    >
+                      {!data?.meta?.availableMonths?.length && (
+                        <option value="">Analiza primero</option>
+                      )}
+                      {data?.meta?.availableMonths?.map((m) => (
+                        <option key={m.key} value={m.key}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="threshold">
+                    <span>
+                      Comparador: modo{" "}
+                      <span
+                        className="help"
+                        title="El comparador sirve para contrastar otro periodo (modo/mes) con el principal."
+                      >
+                        ?
+                      </span>
+                    </span>
+                    <select value={compareMode} onChange={(e) => setCompareMode(e.target.value)}>
+                      <option value="month">Último mes</option>
+                      <option value="ytd">YTD (año a la fecha)</option>
+                      <option value="rolling3">Rolling 3 meses</option>
+                      <option value="rolling6">Rolling 6 meses</option>
+                    </select>
+                  </label>
+
+                  <label className="threshold">
+                    <span>Comparador: mes</span>
+                    <select
+                      value={compareMonthKey ?? ""}
+                      onChange={(e) => setCompareMonthKey(e.target.value || null)}
+                      disabled={!data?.meta?.availableMonths?.length}
+                    >
+                      {!data?.meta?.availableMonths?.length && (
+                        <option value="">Analiza primero</option>
+                      )}
+                      {data?.meta?.availableMonths?.map((m) => (
+                        <option key={m.key} value={m.key}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="threshold">
+                    <span>Umbral de alerta (%)</span>
+                    <input
+                      type="number"
+                      value={threshold}
+                      onChange={(e) => setThreshold(Number(e.target.value))}
+                    />
+                  </label>
+
+                  <div className="threshold">
+                    <span>Comparador</span>
+                    <div className="toggle-label-inline">
+                      <label className="toggle">
+                        <input
+                          type="checkbox"
+                          checked={compareEnabled}
+                          onChange={(e) => setCompareEnabled(e.target.checked)}
+                        />
+                        <span className="toggle-track" />
+                      </label>
+                      <strong>{compareEnabled ? "Activo" : "Desactivado"}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {compareEnabled && isSameComparator && (
+                  <p className="warning">
+                    El comparador coincide con el periodo principal. Cambia modo o mes para activarlo.
+                  </p>
                 )}
-                {data?.meta?.availableMonths?.map((m) => (
-                  <option key={m.key} value={m.key}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="threshold">
-              <span>
-                Comparador: modo{" "}
-                <span
-                  className="help"
-                  title="El comparador sirve para contrastar otro periodo (modo/mes) con el principal."
-                >
-                  ?
-                </span>
-              </span>
-              <select value={compareMode} onChange={(e) => setCompareMode(e.target.value)}>
-                <option value="month">Último mes</option>
-                <option value="ytd">YTD (año a la fecha)</option>
-                <option value="rolling3">Rolling 3 meses</option>
-                <option value="rolling6">Rolling 6 meses</option>
-              </select>
-            </label>
-            <label className="threshold">
-              <span>Comparador: mes</span>
-              <select
-                value={compareMonthKey ?? ""}
-                onChange={(e) => setCompareMonthKey(e.target.value || null)}
-                disabled={!data?.meta?.availableMonths?.length}
-              >
-                {!data?.meta?.availableMonths?.length && (
-                  <option value="">Analiza primero</option>
-                )}
-                {data?.meta?.availableMonths?.map((m) => (
-                  <option key={m.key} value={m.key}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="threshold">
-              <span>Activar comparador</span>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={compareEnabled}
-                  onChange={(e) => setCompareEnabled(e.target.checked)}
-                />
-                <span className="toggle-track" />
-              </label>
-            </label>
-            {isSameComparator && (
-              <p className="warning">
-                El comparador coincide con el periodo principal. Cambia modo o mes para activarlo.
-              </p>
-            )}
-            <label className="threshold">
-              <span>Umbral de alerta (%)</span>
-              <input
-                type="number"
-                value={threshold}
-                onChange={(e) => setThreshold(Number(e.target.value))}
-              />
-            </label>
-            <div className="actions">
-              <button type="submit" disabled={!file || loading}>
-                {loading ? "Analizando..." : "Analizar"}
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                disabled={true}
-                title="Obtener datos directamente desde NetSuite"
-              >
-                📡 Analizar desde NetSuite
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={handleDownload}
-                disabled={!file || loading}
-              >
-                Descargar Excel
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                onClick={handleExportCurrentViewPdf}
-                disabled={!data || pdfLoading}
-              >
-                {pdfLoading ? "Generando PDF..." : "Exportar PDF (vista actual)"}
-              </button>
+              </section>
             </div>
           </form>
           {error && <p className="error">{error}</p>}

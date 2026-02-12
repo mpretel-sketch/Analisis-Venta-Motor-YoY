@@ -28,10 +28,10 @@ body {
 
 .hero {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 32px;
-  align-items: center;
-  margin-bottom: 40px;
+  grid-template-columns: minmax(280px, 1fr);
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 28px;
 }
 
 .eyebrow {
@@ -57,12 +57,96 @@ h1 {
   background: var(--panel);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 28px;
+  padding: 22px;
 }
 
 .hero-card form {
   display: grid;
   gap: 18px;
+}
+
+.hero-top-layout {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.hero-upload-panel,
+.hero-controls-panel {
+  background: #faf5ee;
+  border: 1px solid #efdfcf;
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.hero-upload-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.hero-upload-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.hero-dropzone {
+  padding: 14px;
+}
+
+.hero-file-pill {
+  margin-top: 10px;
+  display: inline-block;
+  background: #fff;
+  border: 1px solid #e3d2c2;
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
+.hero-params-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.toggle-label-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toggle-label-inline strong {
+  font-size: 0.9rem;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.hero-actions button {
+  min-width: 130px;
+}
+
+.hero-actions button[type="submit"] {
+  background: linear-gradient(135deg, #c94b2a 0%, #a73f23 100%);
+}
+
+.hero-actions .secondary {
+  background: linear-gradient(135deg, #0f6b6e 0%, #0c595c 100%);
+}
+
+.hero-actions .ghost {
+  background: #f8f3ed;
+}
+
+button.tertiary {
+  background: #f3ece3;
+  color: #7d7167;
+  border: 1px solid #d7c6b7;
 }
 
 .file,
@@ -575,8 +659,16 @@ th {
   }
 
   .hero {
-    gap: 20px;
-    margin-bottom: 24px;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .hero-top-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-params-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
   .panel {
@@ -592,6 +684,24 @@ th {
   .summary-grid {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 12px;
+  }
+
+  .hero-card {
+    padding: 14px;
+  }
+
+  .hero-upload-panel,
+  .hero-controls-panel {
+    padding: 12px;
+  }
+
+  .hero-params-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions button {
+    min-width: unset;
+    flex: 1 1 calc(50% - 6px);
   }
 
   .panel-head {
