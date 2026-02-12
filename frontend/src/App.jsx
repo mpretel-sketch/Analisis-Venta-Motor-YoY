@@ -941,7 +941,6 @@ export default function App() {
                 <div>
                   <h3>Resumen inteligente</h3>
                   <p className="muted">Conclusiones ejecutivas automáticas del periodo.</p>
-                  <p className="tag">Fuente: {data.aiSummary.source === "gemini" ? "Gemini" : "Fallback heurístico"}</p>
                   {data.aiSummary.source !== "gemini" && data.aiSummary.llmFallbackReason && (
                     <p className="muted">Gemini no disponible: {data.aiSummary.llmFallbackReason}</p>
                   )}

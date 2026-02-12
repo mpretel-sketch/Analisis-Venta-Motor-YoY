@@ -830,8 +830,8 @@ def _default_actionable_filters(
 
 
 @retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=0.4, min=0.4, max=1.2),
     retry=retry_if_exception_type((requests.exceptions.RequestException, requests.exceptions.Timeout)),
     reraise=True
 )
@@ -862,7 +862,7 @@ def _build_ai_summary_gemini(
         return None, "missing_gemini_api_key"
 
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "12"))
+    timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "4.5"))
 
     payload = {
         "period": period_label,
@@ -906,7 +906,7 @@ def _build_ai_summary_gemini(
     prompt = (
         "Eres un analista financiero senior de revenue hotelero. "
         "Responde SOLO con JSON valido con esta estructura exacta: "
-        '{"headline": string, "conclusions": string[<=4], "observations": string[<=4], '
+        '{"conclusions": string[<=4], "observations": string[<=4], '
         '"risks": string[<=3], "opportunities": string[<=3], "actions": string[<=4], '
         '"actionableFilters": [{"type": "search|location|impact_min|impact_max|var_min|var_max", "value": string, "label": string}]}. '
         "Escribe en espanol neutro, directo y accionable para CFO. "
@@ -918,25 +918,19 @@ def _build_ai_summary_gemini(
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     try:
-        response = requests.post(
-            url,
-            headers={"Content-Type": "application/json"},
-            json={
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [{"text": prompt}],
-                    }
-                ],
-                "generationConfig": {
-                    "temperature": 0.0,
-                    "responseMimeType": "application/json",
-                },
+        request_payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": prompt}],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.0,
+                "responseMimeType": "application/json",
             },
-            timeout=(3.0, timeout),
-        )
-        response.raise_for_status()
-        data = response.json()
+        }
+        data = _call_gemini_api(url, request_payload, timeout=(2.0, timeout))
 
         candidates = data.get("candidates") or []
         if not candidates:
@@ -965,7 +959,6 @@ def _build_ai_summary_gemini(
             return None, "invalid_gemini_json"
 
         logger.info("Successfully parsed Gemini response")
-        headline = str(parsed.get("headline", "")).strip()
         conclusions = [str(x).strip() for x in (parsed.get("conclusions") or []) if str(x).strip()]
         observations = [str(x).strip() for x in (parsed.get("observations") or []) if str(x).strip()]
         risks = [str(x).strip() for x in (parsed.get("risks") or []) if str(x).strip()]
@@ -991,15 +984,12 @@ def _build_ai_summary_gemini(
                         }
                     )
 
-        if not headline:
-            return None, "empty_headline"
 
         if not actionable_filters:
             actionable_filters = _default_actionable_filters(alerts, growth, location_rows)
 
         return {
             "source": "gemini",
-            "headline": headline,
             "conclusions": conclusions[:4],
             "observations": observations[:4],
             "risks": risks[:3],
@@ -1007,6 +997,11 @@ def _build_ai_summary_gemini(
             "actions": actions[:4],
             "actionableFilters": actionable_filters[:6],
         }, None
+    except requests.exceptions.Timeout:
+        return None, "gemini_timeout"
+    except requests.exceptions.HTTPError as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        return None, f"gemini_http_{status}" if status else "gemini_http_error"
     except Exception as exc:
         return None, str(exc)
 
