@@ -117,6 +117,18 @@ export default function App() {
     if (Object.prototype.hasOwnProperty.call(next, "location")) {
       setLocation(next.location);
     }
+    if (Object.prototype.hasOwnProperty.call(next, "impactMin")) {
+      setImpactMin(String(next.impactMin));
+    }
+    if (Object.prototype.hasOwnProperty.call(next, "impactMax")) {
+      setImpactMax(String(next.impactMax));
+    }
+    if (Object.prototype.hasOwnProperty.call(next, "varMin")) {
+      setVarMin(String(next.varMin));
+    }
+    if (Object.prototype.hasOwnProperty.call(next, "varMax")) {
+      setVarMax(String(next.varMax));
+    }
     if (!file) {
       setTimeout(() => submitNetSuiteAnalysis(), 0);
     }
@@ -294,6 +306,16 @@ export default function App() {
       color: pieColors[idx % pieColors.length],
     }));
   }, [countryPieData]);
+
+  const handleActionableFilter = (f) => {
+    if (!f?.type) return;
+    if (f.type === "search") applyFiltersAndReload({ search: f.value || "" });
+    if (f.type === "location") applyFiltersAndReload({ location: f.value || "all", search: "" });
+    if (f.type === "impact_min") applyFiltersAndReload({ impactMin: f.value || "" });
+    if (f.type === "impact_max") applyFiltersAndReload({ impactMax: f.value || "" });
+    if (f.type === "var_min") applyFiltersAndReload({ varMin: f.value || "" });
+    if (f.type === "var_max") applyFiltersAndReload({ varMax: f.value || "" });
+  };
 
   useEffect(() => {
     // Warm backend once to reduce first analyze latency (cold starts on free tier).
@@ -970,6 +992,23 @@ export default function App() {
                     ))}
                   </ul>
                 </div>
+                {!!(data.aiSummary.actionableFilters || []).length && (
+                  <div className="chart">
+                    <h4>Filtros accionables</h4>
+                    <div className="actions">
+                      {(data.aiSummary.actionableFilters || []).map((f, idx) => (
+                        <button
+                          key={`af-${idx}`}
+                          type="button"
+                          className="ghost small"
+                          onClick={() => handleActionableFilter(f)}
+                        >
+                          {f.label || `${f.type}: ${f.value}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           )}

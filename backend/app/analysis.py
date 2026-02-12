@@ -794,7 +794,35 @@ def _build_ai_summary_heuristic(
         "risks": risks[:3],
         "opportunities": opportunities[:3],
         "actions": actions[:4],
+        "actionableFilters": _default_actionable_filters(alerts, growth, location_rows),
     }
+
+
+def _default_actionable_filters(
+    alerts: pd.DataFrame,
+    growth: pd.DataFrame,
+    location_rows: List[Dict],
+) -> List[Dict]:
+    items: List[Dict] = []
+
+    if len(alerts):
+        hotel = str(alerts.iloc[0].get("Cliente", "")).strip()
+        if hotel:
+            items.append({"type": "search", "value": hotel, "label": f"Hotel alerta: {hotel}"})
+
+    if len(growth):
+        hotel = str(growth.iloc[0].get("Cliente", "")).strip()
+        if hotel:
+            items.append({"type": "search", "value": hotel, "label": f"Hotel crecimiento: {hotel}"})
+
+    if location_rows:
+        loc = str(location_rows[0].get("Ubicacion", "")).strip()
+        if loc:
+            items.append({"type": "location", "value": loc, "label": f"Ubicación líder: {loc}"})
+
+    items.append({"type": "var_max", "value": "-20", "label": "Variación <= -20%"})
+    items.append({"type": "impact_min", "value": "5000", "label": "Impacto >= 5.000 EUR"})
+    return items[:5]
 
 
 def _build_ai_summary_gemini(
@@ -845,13 +873,9 @@ def _build_ai_summary_gemini(
     criteria_prompt = os.getenv(
         "AI_SUMMARY_CRITERIA",
         (
-            "Criterios fijos obligatorios: "
-            "1) Prioriza impacto economico absoluto (EUR) sobre porcentaje; "
-            "2) Destaca concentracion de riesgo por hotel/pais/ubicacion; "
-            "3) Separa claramente riesgos vs oportunidades; "
-            "4) Acciones siempre concretas, medibles y de corto plazo (30-60 dias); "
-            "5) No inventes datos, usa solo la entrada; "
-            "6) Tono ejecutivo CFO, directo y sin relleno."
+            "Eres experto en Análisis numérico. No pongas valoraciones ni positivas ni negativas. "
+            "Lo que vendemos es motor de reservas hoteleras con modelo de negocio comisionable sobre dichas reservas. "
+            "Entrega resultados objetivos, accionables y orientados a decisión."
         ),
     )
 
@@ -859,7 +883,8 @@ def _build_ai_summary_gemini(
         "Eres un analista financiero senior de revenue hotelero. "
         "Responde SOLO con JSON valido con esta estructura exacta: "
         '{"headline": string, "conclusions": string[<=4], "observations": string[<=4], '
-        '"risks": string[<=3], "opportunities": string[<=3], "actions": string[<=4]}. '
+        '"risks": string[<=3], "opportunities": string[<=3], "actions": string[<=4], '
+        '"actionableFilters": [{"type": "search|location|impact_min|impact_max|var_min|var_max", "value": string, "label": string}]}. '
         "Escribe en espanol neutro, directo y accionable para CFO. "
         + criteria_prompt
         + " Datos de entrada: "
@@ -921,8 +946,30 @@ def _build_ai_summary_gemini(
         opportunities = [str(x).strip() for x in (parsed.get("opportunities") or []) if str(x).strip()]
         actions = [str(x).strip() for x in (parsed.get("actions") or []) if str(x).strip()]
 
+        raw_filters = parsed.get("actionableFilters") or []
+        actionable_filters: List[Dict] = []
+        allowed = {"search", "location", "impact_min", "impact_max", "var_min", "var_max"}
+        if isinstance(raw_filters, list):
+            for item in raw_filters:
+                if not isinstance(item, dict):
+                    continue
+                kind = str(item.get("type", "")).strip()
+                value = str(item.get("value", "")).strip()
+                label = str(item.get("label", "")).strip()
+                if kind in allowed and value:
+                    actionable_filters.append(
+                        {
+                            "type": kind,
+                            "value": value,
+                            "label": label or f"{kind}: {value}",
+                        }
+                    )
+
         if not headline:
             return None, "empty_headline"
+
+        if not actionable_filters:
+            actionable_filters = _default_actionable_filters(alerts, growth, location_rows)
 
         return {
             "source": "gemini",
@@ -932,6 +979,7 @@ def _build_ai_summary_gemini(
             "risks": risks[:3],
             "opportunities": opportunities[:3],
             "actions": actions[:4],
+            "actionableFilters": actionable_filters[:6],
         }, None
     except Exception as exc:
         return None, str(exc)
