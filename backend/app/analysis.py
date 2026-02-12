@@ -842,13 +842,28 @@ def _build_ai_summary_gemini(
         "topLocations": location_rows[:3],
     }
 
+    criteria_prompt = os.getenv(
+        "AI_SUMMARY_CRITERIA",
+        (
+            "Criterios fijos obligatorios: "
+            "1) Prioriza impacto economico absoluto (EUR) sobre porcentaje; "
+            "2) Destaca concentracion de riesgo por hotel/pais/ubicacion; "
+            "3) Separa claramente riesgos vs oportunidades; "
+            "4) Acciones siempre concretas, medibles y de corto plazo (30-60 dias); "
+            "5) No inventes datos, usa solo la entrada; "
+            "6) Tono ejecutivo CFO, directo y sin relleno."
+        ),
+    )
+
     prompt = (
         "Eres un analista financiero senior de revenue hotelero. "
         "Responde SOLO con JSON valido con esta estructura exacta: "
         '{"headline": string, "conclusions": string[<=4], "observations": string[<=4], '
         '"risks": string[<=3], "opportunities": string[<=3], "actions": string[<=4]}. '
         "Escribe en espanol neutro, directo y accionable para CFO. "
-        "Datos de entrada: " + json.dumps(payload, ensure_ascii=True)
+        + criteria_prompt
+        + " Datos de entrada: "
+        + json.dumps(payload, ensure_ascii=True)
     )
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
@@ -865,7 +880,7 @@ def _build_ai_summary_gemini(
                     }
                 ],
                 "generationConfig": {
-                    "temperature": 0.2,
+                    "temperature": 0.0,
                     "responseMimeType": "application/json",
                 },
             },
