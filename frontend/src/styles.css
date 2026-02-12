@@ -528,3 +528,35 @@ th {
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+.file-dropzone {
+  border: 2px dashed #d6c5b6;
+  border-radius: 16px;
+  padding: 10px;
+  background: #fffaf4;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.file-dropzone.is-over {
+  border-color: #0f6b6e;
+  background: #eef9f8;
+}
+
+.draggable-block {
+  position: relative;
+}
+
+.drag-handle {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 2;
+  color: #8a7f73;
+  font-weight: 700;
+  cursor: grab;
+  user-select: none;
+}
+
+.draggable-block.is-dragging {
+  opacity: 0.75;
+}

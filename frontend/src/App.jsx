@@ -36,6 +36,38 @@ const normalizeThousandsInText = (text) =>
     .replace(/\b\d{1,3}(?:,\d{3})+\b/g, (m) => m.replace(/,/g, "."))
     .replace(/\b\d{4,}\b/g, (m) => integer(Number(m)));
 
+const DEFAULT_PANEL_ORDER = [
+  "filters",
+  "summary-main",
+  "summary-ai",
+  "summary-compare",
+  "trend",
+  "top-impact",
+  "smart-alerts",
+  "tables-main",
+  "tables-new-lost",
+  "clusters",
+  "churn",
+  "cohorts",
+  "distribution",
+  "location-analysis",
+];
+
+const DraggableBlock = ({ id, order, dragId, onDragStart, onDragOver, onDrop, children }) => (
+  <div
+    className={`draggable-block${dragId === id ? " is-dragging" : ""}`}
+    style={{ order }}
+    draggable
+    onDragStart={() => onDragStart(id)}
+    onDragOver={(e) => onDragOver(e)}
+    onDrop={() => onDrop(id)}
+    onDragEnd={() => onDrop(null)}
+  >
+    <div className="drag-handle" title="Arrastra para reordenar">::</div>
+    {children}
+  </div>
+);
+
 const Table = ({ title, rows, columns, limit = 10, onRowClick, defaultOpen = true }) => {
   const [expanded, setExpanded] = useState(false);
   const [visible, setVisible] = useState(defaultOpen);
@@ -147,6 +179,21 @@ export default function App() {
   const [showDistribution, setShowDistribution] = useState(true);
   const analyzeAbortRef = useRef(null);
   const analyzeRequestIdRef = useRef(0);
+  const [isFileDragOver, setIsFileDragOver] = useState(false);
+  const [panelOrder, setPanelOrder] = useState(() => {
+    try {
+      const saved = localStorage.getItem("early_warning_panel_order");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_PANEL_ORDER;
+  });
+  const [dragPanelId, setDragPanelId] = useState(null);
+  const dragPanelRef = useRef(null);
 
   const applyFiltersAndReload = (next) => {
     if (Object.prototype.hasOwnProperty.call(next, "search")) {
@@ -170,6 +217,60 @@ export default function App() {
     if (!file) {
       setTimeout(() => submitNetSuiteAnalysis(), 0);
     }
+  };
+
+  useEffect(() => {
+    localStorage.setItem("early_warning_panel_order", JSON.stringify(panelOrder));
+  }, [panelOrder]);
+
+  const handlePanelDragStart = (id) => {
+    dragPanelRef.current = id;
+    setDragPanelId(id);
+  };
+
+  const handlePanelDragOver = (event) => {
+    event.preventDefault();
+  };
+
+  const handlePanelDrop = (targetId) => {
+    const sourceId = dragPanelRef.current;
+    if (!targetId || !sourceId || sourceId === targetId) {
+      dragPanelRef.current = null;
+      setDragPanelId(null);
+      return;
+    }
+    const next = [...panelOrder];
+    const from = next.indexOf(sourceId);
+    const to = next.indexOf(targetId);
+    if (from === -1 || to === -1) {
+      dragPanelRef.current = null;
+      setDragPanelId(null);
+      return;
+    }
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setPanelOrder(next);
+    dragPanelRef.current = null;
+    setDragPanelId(null);
+  };
+
+  const getPanelOrder = (id) => {
+    const idx = panelOrder.indexOf(id);
+    return idx === -1 ? DEFAULT_PANEL_ORDER.indexOf(id) : idx;
+  };
+
+  const handleDropFile = (event) => {
+    event.preventDefault();
+    setIsFileDragOver(false);
+    const dropped = event.dataTransfer?.files?.[0];
+    if (!dropped) return;
+    const name = (dropped.name || "").toLowerCase();
+    if (!name.endsWith(".xls") && !name.endsWith(".xlsx")) {
+      setError("Formato no soportado. Usa .xls o .xlsx");
+      return;
+    }
+    setError(null);
+    setFile(dropped);
   };
 
   const columnDefs = useMemo(() => {
@@ -666,17 +767,27 @@ export default function App() {
         </div>
         <div className="hero-card">
           <form onSubmit={handleAnalyze}>
-            <label className="file">
-              <span>Archivo Excel (.xls o .xlsx)</span>
-              <input
-                type="file"
-                accept=".xls,.xlsx"
-                onChange={(e) => setFile(e.target.files[0])}
-              />
-              <span className="file-name">
-                {file ? file.name : "Selecciona un archivo"}
-              </span>
-            </label>
+            <div
+              className={`file-dropzone${isFileDragOver ? " is-over" : ""}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsFileDragOver(true);
+              }}
+              onDragLeave={() => setIsFileDragOver(false)}
+              onDrop={handleDropFile}
+            >
+              <label className="file">
+                <span>Archivo Excel (.xls o .xlsx)</span>
+                <input
+                  type="file"
+                  accept=".xls,.xlsx"
+                  onChange={(e) => setFile(e.target.files[0])}
+                />
+                <span className="file-name">
+                  {file ? file.name : "Selecciona un archivo o arrástralo aquí"}
+                </span>
+              </label>
+            </div>
             <label className="threshold">
               <span>
                 Modo de análisis{" "}
@@ -823,6 +934,7 @@ export default function App() {
 
       {data && (
         <main className="content">
+          <DraggableBlock id="filters" order={getPanelOrder("filters")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel filters">
             <div className="panel-head">
               <h3>Filtros</h3>
@@ -937,7 +1049,9 @@ export default function App() {
             </div>
             )}
           </section>
+          </DraggableBlock>
 
+          <DraggableBlock id="summary-main" order={getPanelOrder("summary-main")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel summary">
             <div className="panel-head">
               <h3>Comparativa principal</h3>
@@ -995,8 +1109,10 @@ export default function App() {
             </>
             )}
           </section>
+          </DraggableBlock>
 
           {data.aiSummary && (
+            <DraggableBlock id="summary-ai" order={getPanelOrder("summary-ai")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
             <section className="panel">
               <div className="panel-head">
                 <div>
@@ -1060,9 +1176,11 @@ export default function App() {
               </div>
               )}
             </section>
+            </DraggableBlock>
           )}
 
           {compareEnabled && data.compare && !isSameComparator && (
+            <DraggableBlock id="summary-compare" order={getPanelOrder("summary-compare")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
             <section className="panel summary">
               <div className="panel-head">
                 <h3>Comparador de periodos</h3>
@@ -1122,7 +1240,9 @@ export default function App() {
               </>
               )}
             </section>
+            </DraggableBlock>
           )}
+          <DraggableBlock id="trend" order={getPanelOrder("trend")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel">
             <div className="panel-head">
               <div>
@@ -1151,7 +1271,9 @@ export default function App() {
               </div>
             )}
           </section>
+          </DraggableBlock>
 
+          <DraggableBlock id="top-impact" order={getPanelOrder("top-impact")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel">
             <div className="panel-head">
               <div>
@@ -1229,7 +1351,9 @@ export default function App() {
               </div>
             )}
           </section>
+          </DraggableBlock>
 
+          <DraggableBlock id="smart-alerts" order={getPanelOrder("smart-alerts")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel">
             <div className="panel-head">
               <div>
@@ -1307,17 +1431,23 @@ export default function App() {
               </div>
             )}
           </section>
+          </DraggableBlock>
 
+          <DraggableBlock id="tables-main" order={getPanelOrder("tables-main")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <div className="grid">
             <Table title="Alertas" rows={data.tables.alerts} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
             <Table title="Crecimientos" rows={data.tables.growth} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
           </div>
+          </DraggableBlock>
 
+          <DraggableBlock id="tables-new-lost" order={getPanelOrder("tables-new-lost")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <div className="grid">
             <Table title="Hoteles nuevos" rows={data.tables.new} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
             <Table title="Hoteles perdidos" rows={data.tables.lost} columns={columnDefs} onRowClick={(row) => applyFiltersAndReload({ search: row.Cliente })} />
           </div>
+          </DraggableBlock>
 
+          <DraggableBlock id="clusters" order={getPanelOrder("clusters")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel">
             <div className="panel-head">
               <div>
@@ -1355,8 +1485,10 @@ export default function App() {
             </div>
             )}
           </section>
+          </DraggableBlock>
 
 
+          <DraggableBlock id="churn" order={getPanelOrder("churn")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel">
             <div className="panel-head">
               <div>
@@ -1378,7 +1510,9 @@ export default function App() {
             />
             )}
           </section>
+          </DraggableBlock>
 
+          <DraggableBlock id="cohorts" order={getPanelOrder("cohorts")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel">
             <div className="panel-head">
               <div>
@@ -1434,7 +1568,9 @@ export default function App() {
             </div>
             )}
           </section>
+          </DraggableBlock>
 
+          <DraggableBlock id="distribution" order={getPanelOrder("distribution")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel">
             <div className="panel-head">
               <div>
@@ -1521,16 +1657,19 @@ export default function App() {
             </div>
             )}
           </section>
+          </DraggableBlock>
 
 
 
 
+          <DraggableBlock id="location-analysis" order={getPanelOrder("location-analysis")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <Table
             title="Análisis por ubicación"
             rows={data.tables.locations}
             columns={locationColumns}
             onRowClick={(row) => applyFiltersAndReload({ location: row.Ubicacion, search: "" })}
           />
+          </DraggableBlock>
         </main>
       )}
     </div>
