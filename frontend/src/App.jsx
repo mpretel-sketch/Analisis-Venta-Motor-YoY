@@ -941,6 +941,7 @@ export default function App() {
                 <div>
                   <h3>Resumen inteligente</h3>
                   <p className="muted">Conclusiones ejecutivas automáticas del periodo.</p>
+                  <p className="tag">Fuente: {data.aiSummary.source === "gemini" ? "Gemini" : "Fallback heurístico"}</p>
                   {data.aiSummary.source !== "gemini" && data.aiSummary.llmFallbackReason && (
                     <p className="muted">Gemini no disponible: {data.aiSummary.llmFallbackReason}</p>
                   )}
@@ -987,23 +988,6 @@ export default function App() {
                     ))}
                   </ul>
                 </div>
-                {!!(data.aiSummary.actionableFilters || []).length && (
-                  <div className="chart">
-                    <h4>Tags</h4>
-                    <div className="actions">
-                      {(data.aiSummary.actionableFilters || []).map((f, idx) => (
-                        <button
-                          key={`af-${idx}`}
-                          type="button"
-                          className="ghost small"
-                          onClick={() => handleActionableFilter(f)}
-                        >
-                          {f.label || `${f.type}: ${f.value}`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </section>
           )}
