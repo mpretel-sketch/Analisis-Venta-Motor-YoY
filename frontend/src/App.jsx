@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import {
   Bar,
   BarChart,
@@ -196,6 +198,8 @@ export default function App() {
   });
   const [dragPanelId, setDragPanelId] = useState(null);
   const dragPanelRef = useRef(null);
+  const dashboardRef = useRef(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const applyFiltersAndReload = (next) => {
     if (Object.prototype.hasOwnProperty.call(next, "search")) {
@@ -680,6 +684,53 @@ export default function App() {
   };
 
 
+  const handleExportCurrentViewPdf = async () => {
+    if (!dashboardRef.current) return;
+    setPdfLoading(true);
+    setError(null);
+
+    try {
+      const target = dashboardRef.current;
+      const canvas = await html2canvas(target, {
+        scale: Math.min(window.devicePixelRatio || 1, 2),
+        useCORS: true,
+        backgroundColor: "#f6f0e8",
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      const margin = 8;
+      const renderWidth = pdfWidth - margin * 2;
+      const renderHeight = (canvas.height * renderWidth) / canvas.width;
+
+      let heightLeft = renderHeight;
+      let position = margin;
+
+      pdf.addImage(imgData, "PNG", margin, position, renderWidth, renderHeight);
+      heightLeft -= (pdfHeight - margin * 2);
+
+      while (heightLeft > 0) {
+        pdf.addPage();
+        position = margin - (renderHeight - heightLeft);
+        pdf.addImage(imgData, "PNG", margin, position, renderWidth, renderHeight);
+        heightLeft -= (pdfHeight - margin * 2);
+      }
+
+      const periodLabel = data?.meta?.latestLabel || "current";
+      const safeLabel = String(periodLabel).replace(/\s+/g, "_").replace(/[^\w-]/g, "");
+      pdf.save(`Executive_YoY_BE_Control_${safeLabel}.pdf`);
+    } catch (err) {
+      setError(err?.message || "No se pudo exportar el PDF de la vista actual.");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+
   useEffect(() => {
     return () => {
       if (analyzeAbortRef.current) {
@@ -905,10 +956,10 @@ export default function App() {
               <button
                 type="button"
                 className="ghost"
-                onClick={() => window.print()}
-                disabled={!data}
+                onClick={handleExportCurrentViewPdf}
+                disabled={!data || pdfLoading}
               >
-                Imprimir
+                {pdfLoading ? "Generando PDF..." : "Exportar PDF (vista actual)"}
               </button>
             </div>
           </form>
@@ -935,7 +986,7 @@ export default function App() {
       </header>
 
       {data && (
-        <main className="content">
+        <main className="content" ref={dashboardRef}>
           <DraggableBlock id="filters" order={getPanelOrder("filters")} dragId={dragPanelId} onDragStart={handlePanelDragStart} onDragOver={handlePanelDragOver} onDrop={handlePanelDrop}>
           <section className="panel filters">
             <div className="panel-head">
