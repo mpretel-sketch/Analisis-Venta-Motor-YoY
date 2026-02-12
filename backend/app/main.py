@@ -6,6 +6,7 @@ from typing import Optional
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
+from functools import partial
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -79,8 +80,7 @@ async def analyze(
         file_bytes = await file.read()
         logger.info(f"Starting analysis for file: {file.filename}")
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            executor,
+        analyze_task = partial(
             analyze_yoy,
             file_bytes,
             file.filename,
@@ -97,11 +97,11 @@ async def analyze(
             recovery_threshold=recovery_threshold,
             churn_months=churn_months or 9,
         )
+        result = await loop.run_in_executor(executor, analyze_task)
         logger.info(f"Analysis completed for {file.filename}")
         if compare_mode:
             loop = asyncio.get_event_loop()
-            compare = await loop.run_in_executor(
-                executor,
+            compare_task = partial(
                 analyze_yoy,
                 file_bytes,
                 file.filename,
@@ -118,6 +118,7 @@ async def analyze(
                 recovery_threshold=recovery_threshold,
                 churn_months=churn_months or 9,
             )
+            compare = await loop.run_in_executor(executor, compare_task)
             logger.info(f"Analysis completed for {file.filename}")
             result["compare"] = compare
         return JSONResponse(content=_sanitize_json(result))
@@ -244,13 +245,13 @@ async def analyze_netsuite(
             ) from exc
 
         # Usar la misma lógica de análisis que el endpoint original
-        logger.info(f"Starting analysis for file: {file.filename}")
+        source_filename = "netsuite_export.xlsx"
+        logger.info(f"Starting analysis for file: {source_filename}")
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            executor,
+        analyze_task = partial(
             analyze_yoy,
             file_bytes,
-            file.filename,
+            source_filename,
             alert_threshold=alert_threshold or -30.0,
             mode=(mode or "month"),
             month_key=month_key,
@@ -264,16 +265,16 @@ async def analyze_netsuite(
             recovery_threshold=recovery_threshold,
             churn_months=churn_months or 9,
         )
-        logger.info(f"Analysis completed for {file.filename}")
+        result = await loop.run_in_executor(executor, analyze_task)
+        logger.info(f"Analysis completed for {source_filename}")
 
         # Si hay modo de comparación, ejecutarlo
         if compare_mode:
             loop = asyncio.get_event_loop()
-            compare = await loop.run_in_executor(
-                executor,
+            compare_task = partial(
                 analyze_yoy,
                 file_bytes,
-                file.filename,
+                source_filename,
                 alert_threshold=alert_threshold or -30.0,
                 mode=compare_mode,
                 month_key=compare_month_key,
@@ -285,8 +286,10 @@ async def analyze_netsuite(
                 var_max=var_max,
                 persist_threshold=persist_threshold,
                 recovery_threshold=recovery_threshold,
+                churn_months=churn_months or 9,
             )
-            logger.info(f"Analysis completed for {file.filename}")
+            compare = await loop.run_in_executor(executor, compare_task)
+            logger.info(f"Analysis completed for {source_filename}")
             result["compare"] = compare
 
         return JSONResponse(content=_sanitize_json(result))
