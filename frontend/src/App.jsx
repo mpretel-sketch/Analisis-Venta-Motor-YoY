@@ -38,6 +38,15 @@ const normalizeThousandsInText = (text) =>
     .replace(/\b\d{1,3}(?:,\d{3})+\b/g, (m) => m.replace(/,/g, "."))
     .replace(/\b\d{4,}\b/g, (m) => integer(Number(m)));
 
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+
 const DEFAULT_PANEL_ORDER = [
   "filters",
   "summary-main",
@@ -690,34 +699,52 @@ export default function App() {
     setError(null);
 
     try {
-      const target = dashboardRef.current;
-      const canvas = await html2canvas(target, {
-        scale: Math.min(window.devicePixelRatio || 1, 2),
-        useCORS: true,
-        backgroundColor: "#f6f0e8",
-        logging: false,
-      });
+      const panels = Array.from(dashboardRef.current.querySelectorAll(".panel")).filter(
+        (el) => el instanceof HTMLElement && el.offsetParent !== null,
+      );
 
-      const imgData = canvas.toDataURL("image/png");
+      if (!panels.length) {
+        throw new Error("No hay bloques visibles para exportar.");
+      }
+
       const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-
       const margin = 8;
-      const renderWidth = pdfWidth - margin * 2;
-      const renderHeight = (canvas.height * renderWidth) / canvas.width;
+      const contentWidth = pdfWidth - margin * 2;
+      const contentHeight = pdfHeight - margin * 2;
+      const gap = 4;
+      let cursorY = margin;
+      let isFirst = true;
 
-      let heightLeft = renderHeight;
-      let position = margin;
+      for (const panel of panels) {
+        const canvas = await html2canvas(panel, {
+          scale: Math.min(window.devicePixelRatio || 1, 2),
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          logging: false,
+        });
 
-      pdf.addImage(imgData, "PNG", margin, position, renderWidth, renderHeight);
-      heightLeft -= (pdfHeight - margin * 2);
+        const imgData = canvas.toDataURL("image/png");
+        let renderWidth = contentWidth;
+        let renderHeight = (canvas.height * renderWidth) / canvas.width;
 
-      while (heightLeft > 0) {
-        pdf.addPage();
-        position = margin - (renderHeight - heightLeft);
-        pdf.addImage(imgData, "PNG", margin, position, renderWidth, renderHeight);
-        heightLeft -= (pdfHeight - margin * 2);
+        // If a block is taller than a page, shrink it to keep the block uncut.
+        if (renderHeight > contentHeight) {
+          const fit = contentHeight / renderHeight;
+          renderHeight *= fit;
+          renderWidth *= fit;
+        }
+
+        if (!isFirst && cursorY + renderHeight > margin + contentHeight) {
+          pdf.addPage();
+          cursorY = margin;
+        }
+
+        const x = margin + (contentWidth - renderWidth) / 2;
+        pdf.addImage(imgData, "PNG", x, cursorY, renderWidth, renderHeight);
+        cursorY += renderHeight + gap;
+        isFirst = false;
       }
 
       const periodLabel = data?.meta?.latestLabel || "current";
@@ -730,6 +757,188 @@ export default function App() {
     }
   };
 
+  const handleExportCurrentViewHtml = () => {
+    if (!data) return;
+
+    const buildTableRows = (rows, limit = 60) => {
+      const safeRows = Array.isArray(rows) ? rows.slice(0, limit) : [];
+      if (!safeRows.length) {
+        return '<tr><td colspan="7" class="muted">Sin registros</td></tr>';
+      }
+      return safeRows
+        .map((row) => `
+          <tr>
+            <td>${escapeHtml(row.Cliente || "—")}</td>
+            <td>${escapeHtml(row.HotelCode || "—")}</td>
+            <td>${escapeHtml(row.Ubicacion || "—")}</td>
+            <td>${escapeHtml(currency(row.Prev))}</td>
+            <td>${escapeHtml(currency(row.Curr))}</td>
+            <td>${escapeHtml(currency(row.VarAbs))}</td>
+            <td>${escapeHtml(percent(row.VarPct))}</td>
+          </tr>
+        `)
+        .join("");
+    };
+
+    const buildDistRows = (rows) => {
+      if (!rows?.length) return '<div class="muted">Sin datos</div>';
+      return rows
+        .map((row) => {
+          const width = Math.max(2, Math.min(100, Number(row.pct || 0)));
+          return `
+            <div class="dist-row">
+              <div class="dist-row-head">
+                <span>${escapeHtml(row.label || row.name || "—")}</span>
+                <strong>${escapeHtml(percent(row.pct))}</strong>
+              </div>
+              <div class="dist-track"><div class="dist-fill" style="width:${width}%; background:${escapeHtml(row.color || "#516BA6")}"></div></div>
+            </div>
+          `;
+        })
+        .join("");
+    };
+
+    const buildBulletList = (items) => {
+      if (!items?.length) return "<li>Sin elementos.</li>";
+      return items
+        .map((item) => `<li>${escapeHtml(normalizeThousandsInText(item))}</li>`)
+        .join("");
+    };
+
+    const summary = data.summary || {};
+    const compare = data.compare?.summary;
+    const compareMeta = data.compare?.meta;
+
+    const html = `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Executive YoY BE Control - ${escapeHtml(data.meta?.periodLabel || data.meta?.pairLabel || "Reporte")}</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Inter", "Segoe UI", Arial, sans-serif; color: #1f2937; background: #f7f5f2; }
+  .page { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .card { background: #fff; border: 1px solid #e6dfd7; border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+  h1 { margin: 0 0 8px; font-size: 1.8rem; }
+  h2 { margin: 0 0 10px; font-size: 1.2rem; }
+  h3 { margin: 0 0 8px; font-size: 1rem; }
+  p { margin: 0; }
+  .muted { color: #6b7280; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip { background: #eef2ff; color: #1e3a8a; border-radius: 999px; padding: 6px 10px; font-size: 0.82rem; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .kpi { background: #faf7f3; border: 1px solid #ece3d9; border-radius: 12px; padding: 12px; }
+  .kpi .label { color: #6b7280; font-size: 0.82rem; }
+  .kpi .value { font-weight: 700; margin-top: 6px; font-size: 1.08rem; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .list { margin: 8px 0 0 18px; padding: 0; }
+  .list li { margin-bottom: 5px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th, td { border-bottom: 1px solid #eee6dd; padding: 8px 6px; text-align: left; white-space: nowrap; }
+  th { color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.75rem; }
+  .dist-row { margin-bottom: 10px; }
+  .dist-row-head { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.9rem; }
+  .dist-track { height: 10px; border-radius: 999px; background: #eef1f5; overflow: hidden; }
+  .dist-fill { height: 100%; border-radius: 999px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <div class="page">
+    <section class="card">
+      <h1>Executive YoY BE Control</h1>
+      <p class="muted">Presentacion HTML estatica generada desde el estado actual de la aplicacion.</p>
+      <div class="meta">
+        <span class="chip">Periodo: ${escapeHtml(data.meta?.periodLabel || data.meta?.pairLabel || "—")}</span>
+        <span class="chip">Modo: ${escapeHtml((data.meta?.mode || "").toUpperCase())}</span>
+        <span class="chip">Mes key: ${escapeHtml(data.meta?.monthKey || "—")}</span>
+        <span class="chip">Ubicacion filtro: ${escapeHtml(location || "all")}</span>
+        <span class="chip">Busqueda: ${escapeHtml(search || "(vacio)")}</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Comparativa principal</h2>
+      <div class="kpi-grid">
+        <div class="kpi"><div class="label">Facturacion ano anterior</div><div class="value">${escapeHtml(currency(summary.totalPrev))}</div></div>
+        <div class="kpi"><div class="label">Facturacion ano actual</div><div class="value">${escapeHtml(currency(summary.totalCurr))}</div></div>
+        <div class="kpi"><div class="label">Variacion absoluta</div><div class="value">${escapeHtml(currency(summary.totalVar))}</div></div>
+        <div class="kpi"><div class="label">Variacion %</div><div class="value">${escapeHtml(percent(summary.totalVarPct))}</div></div>
+        <div class="kpi"><div class="label">Alertas</div><div class="value">${escapeHtml(integer(summary.alertsCount))}</div></div>
+        <div class="kpi"><div class="label">Crecimientos</div><div class="value">${escapeHtml(integer(summary.growthCount))}</div></div>
+        <div class="kpi"><div class="label">Hoteles nuevos</div><div class="value">${escapeHtml(integer(summary.newCount))}</div></div>
+        <div class="kpi"><div class="label">Hoteles perdidos</div><div class="value">${escapeHtml(integer(summary.lostCount))}</div></div>
+      </div>
+    </section>
+
+    ${compare ? `
+    <section class="card">
+      <h2>Comparador de periodos</h2>
+      <p class="muted">${escapeHtml(compareMeta?.periodLabel || compareMeta?.pairLabel || "")}</p>
+      <div class="kpi-grid" style="margin-top:10px;">
+        <div class="kpi"><div class="label">Facturacion ano anterior</div><div class="value">${escapeHtml(currency(compare.totalPrev))}</div></div>
+        <div class="kpi"><div class="label">Facturacion ano actual</div><div class="value">${escapeHtml(currency(compare.totalCurr))}</div></div>
+        <div class="kpi"><div class="label">Variacion absoluta</div><div class="value">${escapeHtml(currency(compare.totalVar))}</div></div>
+        <div class="kpi"><div class="label">Variacion %</div><div class="value">${escapeHtml(percent(compare.totalVarPct))}</div></div>
+      </div>
+    </section>` : ""}
+
+    <section class="card">
+      <h2>Resumen inteligente</h2>
+      <p class="muted">Fuente: ${escapeHtml(data.aiSummary?.source === "gemini" ? "Gemini" : "Fallback heuristico")}</p>
+      <div class="two-col" style="margin-top:10px;">
+        <div>
+          <h3>Conclusiones</h3>
+          <ul class="list">${buildBulletList(data.aiSummary?.conclusions)}</ul>
+          <h3>Riesgos</h3>
+          <ul class="list">${buildBulletList(data.aiSummary?.risks)}</ul>
+        </div>
+        <div>
+          <h3>Observaciones</h3>
+          <ul class="list">${buildBulletList(data.aiSummary?.observations)}</ul>
+          <h3>Oportunidades</h3>
+          <ul class="list">${buildBulletList(data.aiSummary?.opportunities)}</ul>
+          <h3>Acciones sugeridas</h3>
+          <ul class="list">${buildBulletList(data.aiSummary?.actions)}</ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Top tablas (hasta 60 filas por tabla)</h2>
+      <h3>Alertas</h3>
+      <div class="table-wrap"><table><thead><tr><th>Hotel</th><th>Code</th><th>Ubicacion</th><th>${escapeHtml(data.meta?.previousLabel || "Prev")}</th><th>${escapeHtml(data.meta?.latestLabel || "Curr")}</th><th>Variacion EUR</th><th>Variacion %</th></tr></thead><tbody>${buildTableRows(data.tables?.alerts)}</tbody></table></div>
+      <h3 style="margin-top:14px;">Crecimientos</h3>
+      <div class="table-wrap"><table><thead><tr><th>Hotel</th><th>Code</th><th>Ubicacion</th><th>${escapeHtml(data.meta?.previousLabel || "Prev")}</th><th>${escapeHtml(data.meta?.latestLabel || "Curr")}</th><th>Variacion EUR</th><th>Variacion %</th></tr></thead><tbody>${buildTableRows(data.tables?.growth)}</tbody></table></div>
+    </section>
+
+    <section class="card two-col">
+      <div>
+        <h2>Distribucion por ubicacion</h2>
+        ${buildDistRows(locationPieView)}
+      </div>
+      <div>
+        <h2>Distribucion por pais</h2>
+        ${buildDistRows(countryPieView)}
+      </div>
+    </section>
+  </div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const periodLabel = data?.meta?.latestLabel || "current";
+    const safeLabel = String(periodLabel).replace(/\s+/g, "_").replace(/[^\w-]/g, "");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Executive_YoY_BE_Control_${safeLabel}.html`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     return () => {
@@ -865,6 +1074,14 @@ export default function App() {
                     disabled={!data || pdfLoading}
                   >
                     {pdfLoading ? "Generando PDF..." : "PDF"}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={handleExportCurrentViewHtml}
+                    disabled={!data || loading || pdfLoading}
+                  >
+                    HTML
                   </button>
                   <button
                     type="button"
