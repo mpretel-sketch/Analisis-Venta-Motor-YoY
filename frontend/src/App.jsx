@@ -189,15 +189,41 @@ export default function App() {
     "#bfa27a",
   ];
 
-  const buildPieData = (rows, keyName) => {
-    const list = (rows || [])
-      .map((row) => ({
-        name: row[keyName],
-        value: Number(row.Curr || 0),
-      }))
-      .filter((row) => row.name);
-    list.sort((a, b) => b.value - a.value);
-    return list.slice(0, 10);
+  const regionNames = useMemo(() => new Intl.DisplayNames(["es"], { type: "region" }), []);
+
+  const buildPieData = (rows, keyName, { isCountry = false, maxItems = 7 } = {}) => {
+    const grouped = new Map();
+    (rows || []).forEach((row) => {
+      const raw = String(row?.[keyName] ?? "").trim();
+      if (!raw) return;
+      const value = Number(row?.Curr || 0);
+      if (!Number.isFinite(value) || value <= 0) return;
+
+      const normalizedCode = raw.toUpperCase();
+      const label = isCountry && normalizedCode.length === 2
+        ? (regionNames.of(normalizedCode) || normalizedCode)
+        : raw;
+
+      const key = isCountry ? normalizedCode : label;
+      const current = grouped.get(key) || {
+        name: key,
+        label,
+        value: 0,
+        filterValue: raw,
+      };
+      current.value += value;
+      grouped.set(key, current);
+    });
+
+    const list = Array.from(grouped.values()).sort((a, b) => b.value - a.value);
+    if (list.length <= maxItems) return list;
+
+    const top = list.slice(0, maxItems);
+    const rest = list.slice(maxItems).reduce((acc, row) => acc + row.value, 0);
+    if (rest > 0) {
+      top.push({ name: "OTROS", label: "Otros", value: rest, filterValue: "" });
+    }
+    return top;
   };
 
   const Sparkline = ({ data, metric }) => {
@@ -238,7 +264,25 @@ export default function App() {
   const topAlerts10 = useMemo(() => data?.tables?.alerts?.slice(0, 10) || [], [data]);
   const topGrowth10 = useMemo(() => data?.tables?.growth?.slice(0, 10) || [], [data]);
   const locationPieData = useMemo(() => buildPieData(data?.tables?.locations, "Ubicacion"), [data?.tables?.locations]);
-  const countryPieData = useMemo(() => buildPieData(data?.clusters?.byCountry || [], "Country"), [data?.clusters?.byCountry]);
+  const countryPieData = useMemo(() => buildPieData(data?.clusters?.byCountry || [], "Country", { isCountry: true }), [data?.clusters?.byCountry]);
+
+  const locationPieView = useMemo(() => {
+    const total = locationPieData.reduce((acc, row) => acc + row.value, 0) || 1;
+    return locationPieData.map((row, idx) => ({
+      ...row,
+      pct: (row.value / total) * 100,
+      color: pieColors[idx % pieColors.length],
+    }));
+  }, [locationPieData]);
+
+  const countryPieView = useMemo(() => {
+    const total = countryPieData.reduce((acc, row) => acc + row.value, 0) || 1;
+    return countryPieData.map((row, idx) => ({
+      ...row,
+      pct: (row.value / total) * 100,
+      color: pieColors[idx % pieColors.length],
+    }));
+  }, [countryPieData]);
 
   useEffect(() => {
     if (data?.meta?.monthKey && !monthKey) {
@@ -1203,7 +1247,7 @@ export default function App() {
             <div className="panel-head">
               <div>
                 <h3>Distribución por ubicación y país</h3>
-                              </div>
+              </div>
             </div>
             <div className="grid">
               <div className="chart">
@@ -1211,38 +1255,34 @@ export default function App() {
                 <ResponsiveContainer width="100%" height={340}>
                   <PieChart>
                     <Pie
-                      data={locationPieData}
+                      data={locationPieView}
                       dataKey="value"
-                      nameKey="name"
+                      nameKey="label"
                       innerRadius={72}
                       outerRadius={132}
                       paddingAngle={2}
-                      onClick={(data) => applyFiltersAndReload({ location: data?.name || "all" })}
+                      onClick={(entry) => applyFiltersAndReload({ location: entry?.filterValue || "all" })}
                     >
-                      {locationPieData.map((entry, idx) => (
-                        <Cell key={`loc-${idx}`} fill={pieColors[idx % pieColors.length]} />
+                      {locationPieView.map((entry, idx) => (
+                        <Cell key={`loc-${entry.name}-${idx}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(v) => currency(v)} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="pie-legend">
-                  {locationPieData.map((row) => {
-                    const total = locationPieData.reduce((acc, r) => acc + (r.value || 0), 0) || 1;
-                    const pct = ((row.value / total) * 100).toFixed(1);
-                    return (
-                      <button
-                        key={`loc-legend-${row.name}`}
-                        type="button"
-                        className="pie-legend-item"
-                        onClick={() => applyFiltersAndReload({ location: row.name })}
-                      >
-                        <span className="dot" style={{ backgroundColor: pieColors[locationPieData.indexOf(row) % pieColors.length] }} />
-                        <span>{row.name}</span>
-                        <span>{pct}%</span>
-                      </button>
-                    );
-                  })}
+                  {locationPieView.map((row) => (
+                    <button
+                      key={`loc-legend-${row.name}`}
+                      type="button"
+                      className="pie-legend-item"
+                      onClick={() => applyFiltersAndReload({ location: row.filterValue || "all" })}
+                    >
+                      <span className="dot" style={{ backgroundColor: row.color }} />
+                      <span>{row.label}</span>
+                      <span>{row.pct.toFixed(1)}%</span>
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="chart">
@@ -1250,38 +1290,34 @@ export default function App() {
                 <ResponsiveContainer width="100%" height={340}>
                   <PieChart>
                     <Pie
-                      data={countryPieData}
+                      data={countryPieView}
                       dataKey="value"
-                      nameKey="name"
+                      nameKey="label"
                       innerRadius={72}
                       outerRadius={132}
                       paddingAngle={2}
-                      onClick={(data) => applyFiltersAndReload({ search: data?.name || "" })}
+                      onClick={(entry) => applyFiltersAndReload({ search: entry?.filterValue || "" })}
                     >
-                      {countryPieData.map((entry, idx) => (
-                        <Cell key={`country-${idx}`} fill={pieColors[idx % pieColors.length]} />
+                      {countryPieView.map((entry, idx) => (
+                        <Cell key={`country-${entry.name}-${idx}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(v) => currency(v)} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="pie-legend">
-                  {countryPieData.map((row) => {
-                    const total = countryPieData.reduce((acc, r) => acc + (r.value || 0), 0) || 1;
-                    const pct = ((row.value / total) * 100).toFixed(1);
-                    return (
-                      <button
-                        key={`country-legend-${row.name}`}
-                        type="button"
-                        className="pie-legend-item"
-                        onClick={() => applyFiltersAndReload({ search: row.name })}
-                      >
-                        <span className="dot" style={{ backgroundColor: pieColors[countryPieData.indexOf(row) % pieColors.length] }} />
-                        <span>{row.name}</span>
-                        <span>{pct}%</span>
-                      </button>
-                    );
-                  })}
+                  {countryPieView.map((row) => (
+                    <button
+                      key={`country-legend-${row.name}`}
+                      type="button"
+                      className="pie-legend-item"
+                      onClick={() => applyFiltersAndReload({ search: row.filterValue || "" })}
+                    >
+                      <span className="dot" style={{ backgroundColor: row.color }} />
+                      <span>{row.label}</span>
+                      <span>{row.pct.toFixed(1)}%</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
