@@ -760,54 +760,215 @@ export default function App() {
   const handleExportCurrentViewHtml = () => {
     if (!data) return;
 
-    const buildTableRows = (rows, limit = 60) => {
+    const renderTable = (rows, columns, limit = 80) => {
       const safeRows = Array.isArray(rows) ? rows.slice(0, limit) : [];
       if (!safeRows.length) {
-        return '<tr><td colspan="7" class="muted">Sin registros</td></tr>';
+        return '<div class="table-wrap"><table><tbody><tr><td class="muted">Sin registros</td></tr></tbody></table></div>';
       }
-      return safeRows
-        .map((row) => `
-          <tr>
-            <td>${escapeHtml(row.Cliente || "—")}</td>
-            <td>${escapeHtml(row.HotelCode || "—")}</td>
-            <td>${escapeHtml(row.Ubicacion || "—")}</td>
-            <td>${escapeHtml(currency(row.Prev))}</td>
-            <td>${escapeHtml(currency(row.Curr))}</td>
-            <td>${escapeHtml(currency(row.VarAbs))}</td>
-            <td>${escapeHtml(percent(row.VarPct))}</td>
-          </tr>
-        `)
+      const head = columns.map((col) => `<th>${escapeHtml(col.label)}</th>`).join("");
+      const body = safeRows
+        .map((row) => {
+          const cells = columns
+            .map((col) => `<td>${escapeHtml(col.render(row))}</td>`)
+            .join("");
+          return `<tr>${cells}</tr>`;
+        })
         .join("");
+      return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
     };
 
-    const buildDistRows = (rows) => {
-      if (!rows?.length) return '<div class="muted">Sin datos</div>';
+    const renderBars = (rows, labelKey) => {
+      if (!rows?.length) return '<p class="muted">Sin datos</p>';
       return rows
         .map((row) => {
-          const width = Math.max(2, Math.min(100, Number(row.pct || 0)));
-          return `
-            <div class="dist-row">
-              <div class="dist-row-head">
-                <span>${escapeHtml(row.label || row.name || "—")}</span>
-                <strong>${escapeHtml(percent(row.pct))}</strong>
-              </div>
-              <div class="dist-track"><div class="dist-fill" style="width:${width}%; background:${escapeHtml(row.color || "#516BA6")}"></div></div>
-            </div>
-          `;
+          const w = Math.max(2, Math.min(100, Number(row.pct || 0)));
+          const label = row[labelKey] || row.label || row.name || "—";
+          return `<div class="bar-row"><div class="bar-head"><span>${escapeHtml(label)}</span><strong>${escapeHtml(percent(row.pct))}</strong></div><div class="bar-track"><div class="bar-fill" style="width:${w}%; background:${escapeHtml(row.color || "#516BA6")}"></div></div></div>`;
         })
         .join("");
     };
 
-    const buildBulletList = (items) => {
+    const renderBullets = (items) => {
       if (!items?.length) return "<li>Sin elementos.</li>";
-      return items
-        .map((item) => `<li>${escapeHtml(normalizeThousandsInText(item))}</li>`)
-        .join("");
+      return items.map((item) => `<li>${escapeHtml(normalizeThousandsInText(item))}</li>`).join("");
     };
 
+    const section = (title, content, { open = false, hint = "" } = {}) => `
+      <details class="module" ${open ? "open" : ""}>
+        <summary>
+          <div class="summary-title">${escapeHtml(title)}</div>
+          ${hint ? `<div class="summary-hint">${escapeHtml(hint)}</div>` : ""}
+        </summary>
+        <div class="module-body">${content}</div>
+      </details>
+    `;
+
+    const baseCols = [
+      { label: "Hotel", render: (r) => r.Cliente || "—" },
+      { label: "Code", render: (r) => r.HotelCode || "—" },
+      { label: "Ubicación", render: (r) => r.Ubicacion || "—" },
+      { label: data.meta?.previousLabel || "Prev", render: (r) => currency(r.Prev) },
+      { label: data.meta?.latestLabel || "Curr", render: (r) => currency(r.Curr) },
+      { label: "Variación €", render: (r) => currency(r.VarAbs) },
+      { label: "Variación %", render: (r) => percent(r.VarPct) },
+    ];
+
+    const locationCols = [
+      { label: "Ubicación", render: (r) => r.Ubicacion || "—" },
+      { label: data.meta?.previousLabel || "Prev", render: (r) => currency(r.Prev) },
+      { label: data.meta?.latestLabel || "Curr", render: (r) => currency(r.Curr) },
+      { label: "Variación €", render: (r) => currency(r.VarAbs) },
+      { label: "Variación %", render: (r) => percent(r.VarPct) },
+    ];
+
+    const churnCols = [
+      { label: "Hotel", render: (r) => r.Cliente || "—" },
+      { label: "Ubicación", render: (r) => r.Ubicacion || "—" },
+      { label: "Meses sin ventas", render: (r) => integer(r.MonthsInactive) },
+    ];
+
+    const iaCols = [
+      { label: "Hotel", render: (r) => r.Cliente || "—" },
+      { label: "Ubicación", render: (r) => r.Ubicacion || "—" },
+      { label: "Mes actual", render: (r) => percent(r.VarPctLast) },
+      { label: "Mes previo", render: (r) => percent(r.VarPctPrev) },
+    ];
+
+    const clusterCols = [
+      { label: "Cluster", render: (r) => r.Cluster || "—" },
+      { label: data.meta?.previousLabel || "Prev", render: (r) => currency(r.Prev) },
+      { label: data.meta?.latestLabel || "Curr", render: (r) => currency(r.Curr) },
+      { label: "Variación €", render: (r) => currency(r.VarAbs) },
+      { label: "Variación %", render: (r) => percent(r.VarPct) },
+    ];
+
+    const countryCols = [
+      { label: "País", render: (r) => r.Country || "—" },
+      { label: data.meta?.previousLabel || "Prev", render: (r) => currency(r.Prev) },
+      { label: data.meta?.latestLabel || "Curr", render: (r) => currency(r.Curr) },
+      { label: "Variación €", render: (r) => currency(r.VarAbs) },
+      { label: "Variación %", render: (r) => percent(r.VarPct) },
+    ];
+
     const summary = data.summary || {};
-    const compare = data.compare?.summary;
-    const compareMeta = data.compare?.meta;
+    const compareSummary = data.compare?.summary || null;
+
+    const summaryGrid = `
+      <div class="kpi-grid">
+        <article class="kpi"><span>Facturación año anterior</span><strong>${escapeHtml(currency(summary.totalPrev))}</strong></article>
+        <article class="kpi"><span>Facturación año actual</span><strong>${escapeHtml(currency(summary.totalCurr))}</strong></article>
+        <article class="kpi"><span>Variación absoluta</span><strong>${escapeHtml(currency(summary.totalVar))}</strong></article>
+        <article class="kpi"><span>Variación %</span><strong>${escapeHtml(percent(summary.totalVarPct))}</strong></article>
+        <article class="kpi"><span>Alertas</span><strong>${escapeHtml(integer(summary.alertsCount))}</strong><small>${escapeHtml(currency(summary.alertsImpact))} impacto</small></article>
+        <article class="kpi"><span>Crecimientos</span><strong>${escapeHtml(integer(summary.growthCount))}</strong><small>${escapeHtml(currency(summary.growthImpact))} impacto</small></article>
+        <article class="kpi"><span>Hoteles nuevos</span><strong>${escapeHtml(integer(summary.newCount))}</strong><small>${escapeHtml(currency(summary.newRevenue))} facturación</small></article>
+        <article class="kpi"><span>Hoteles perdidos</span><strong>${escapeHtml(integer(summary.lostCount))}</strong><small>${escapeHtml(currency(summary.lostRevenue))} pérdida</small></article>
+      </div>
+    `;
+
+    const compareGrid = compareSummary
+      ? `<div class="kpi-grid">
+          <article class="kpi"><span>Facturación año anterior</span><strong>${escapeHtml(currency(compareSummary.totalPrev))}</strong></article>
+          <article class="kpi"><span>Facturación año actual</span><strong>${escapeHtml(currency(compareSummary.totalCurr))}</strong></article>
+          <article class="kpi"><span>Variación absoluta</span><strong>${escapeHtml(currency(compareSummary.totalVar))}</strong></article>
+          <article class="kpi"><span>Variación %</span><strong>${escapeHtml(percent(compareSummary.totalVarPct))}</strong></article>
+          <article class="kpi"><span>Alertas</span><strong>${escapeHtml(integer(compareSummary.alertsCount))}</strong></article>
+          <article class="kpi"><span>Crecimientos</span><strong>${escapeHtml(integer(compareSummary.growthCount))}</strong></article>
+          <article class="kpi"><span>Hoteles nuevos</span><strong>${escapeHtml(integer(compareSummary.newCount))}</strong></article>
+          <article class="kpi"><span>Hoteles perdidos</span><strong>${escapeHtml(integer(compareSummary.lostCount))}</strong></article>
+        </div>`
+      : '<p class="muted">Comparador no activo.</p>';
+
+    const trendRows = (data.series || [])
+      .map((r) => `<tr><td>${escapeHtml(r.label || "—")}</td><td>${escapeHtml(currency(r.prev))}</td><td>${escapeHtml(currency(r.curr))}</td><td>${escapeHtml(percent(r.varPct))}</td></tr>`)
+      .join("");
+
+    const cohortsCols = data.cohorts?.columns || [];
+    const cohortsRows = (data.cohorts?.rows || [])
+      .map((row) => {
+        const values = cohortMetric === "active" ? row.active : row.revenue;
+        const cells = cohortsCols
+          .map((_, i) => {
+            const v = values ? values[i] : null;
+            return `<td>${v === null ? "—" : `${escapeHtml(v)}%`}</td>`;
+          })
+          .join("");
+        return `<tr><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(integer(row.size))}</td>${cells}</tr>`;
+      })
+      .join("");
+
+    const modules = [
+      section(
+        "Filtros aplicados",
+        `<div class="chips">
+          <span class="chip">Busqueda: ${escapeHtml(search || "(vacío)")}</span>
+          <span class="chip">Ubicación: ${escapeHtml(location || "all")}</span>
+          <span class="chip">Impacto mín: ${escapeHtml(impactMin || "—")}</span>
+          <span class="chip">Impacto máx: ${escapeHtml(impactMax || "—")}</span>
+          <span class="chip">Var% mín: ${escapeHtml(varMin || "—")}</span>
+          <span class="chip">Var% máx: ${escapeHtml(varMax || "—")}</span>
+          <span class="chip">Persistente %: ${escapeHtml(String(persistThreshold))}</span>
+          <span class="chip">Recuperación %: ${escapeHtml(String(recoveryThreshold))}</span>
+          <span class="chip">Churn meses: ${escapeHtml(String(churnMonths))}</span>
+        </div>`,
+        { open: false },
+      ),
+      section("Comparativa principal", summaryGrid, { open: true, hint: data.meta?.periodLabel || data.meta?.pairLabel || "" }),
+      section("Resumen inteligente", `
+        <p class="muted">Fuente: ${escapeHtml(data.aiSummary?.source === "gemini" ? "Gemini" : "Fallback heurístico")}</p>
+        ${data.aiSummary?.llmFallbackReason ? `<p class="muted">Detalle: ${escapeHtml(data.aiSummary.llmFallbackReason)}</p>` : ""}
+        <div class="two-col" style="margin-top:10px;">
+          <div>
+            <h4>Conclusiones</h4><ul>${renderBullets(data.aiSummary?.conclusions)}</ul>
+            <h4>Riesgos</h4><ul>${renderBullets(data.aiSummary?.risks)}</ul>
+          </div>
+          <div>
+            <h4>Observaciones</h4><ul>${renderBullets(data.aiSummary?.observations)}</ul>
+            <h4>Oportunidades</h4><ul>${renderBullets(data.aiSummary?.opportunities)}</ul>
+            <h4>Acciones sugeridas</h4><ul>${renderBullets(data.aiSummary?.actions)}</ul>
+          </div>
+        </div>
+      `, { open: true }),
+      section("Comparador de periodos", compareGrid, { open: false, hint: data.compare?.meta?.periodLabel || "No activo" }),
+      section(
+        "Tendencia YoY total",
+        `<div class="table-wrap"><table><thead><tr><th>Periodo</th><th>Prev</th><th>Curr</th><th>Var %</th></tr></thead><tbody>${trendRows || '<tr><td colspan="4" class="muted">Sin datos</td></tr>'}</tbody></table></div>`,
+        { open: false },
+      ),
+      section(
+        "Impacto Top 10",
+        `<h4>Alertas</h4>${renderTable((data.tables?.alerts || []).slice(0, 10), baseCols, 10)}<h4 style="margin-top:12px;">Crecimientos</h4>${renderTable((data.tables?.growth || []).slice(0, 10), baseCols, 10)}`,
+        { open: false },
+      ),
+      section(
+        "Alertas inteligentes",
+        `<h4>Persistentes</h4>${renderTable(data.intelligentAlerts?.persistent || [], iaCols, 20)}<h4 style="margin-top:12px;">Recuperación</h4>${renderTable(data.intelligentAlerts?.recovery || [], iaCols, 20)}`,
+        { open: false },
+      ),
+      section("Tabla de alertas", renderTable(data.tables?.alerts || [], baseCols), { open: false }),
+      section("Tabla de crecimientos", renderTable(data.tables?.growth || [], baseCols), { open: false }),
+      section("Tabla de hoteles nuevos", renderTable(data.tables?.new || [], baseCols), { open: false }),
+      section("Tabla de hoteles perdidos", renderTable(data.tables?.lost || [], baseCols), { open: false }),
+      section(
+        "Consolidación por cluster",
+        `<h4>Por cluster</h4>${renderTable(data.clusters?.byCluster || [], clusterCols)}<h4 style="margin-top:12px;">Por país</h4>${renderTable(data.clusters?.byCountry || [], countryCols)}`,
+        { open: false },
+      ),
+      section("Churn", renderTable((data.churn || []).sort((a, b) => (b.MonthsInactive || 0) - (a.MonthsInactive || 0)), churnCols), { open: false }),
+      section(
+        "Cohortes",
+        cohortsCols.length
+          ? `<div class="table-wrap"><table><thead><tr><th>Cohorte</th><th>Tamaño</th>${cohortsCols.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead><tbody>${cohortsRows}</tbody></table></div>`
+          : '<p class="muted">Sin datos de cohortes.</p>',
+        { open: false, hint: cohortMetric === "active" ? "% hoteles activos" : "% facturación retenida" },
+      ),
+      section(
+        "Distribución por ubicación y país",
+        `<div class="two-col"><div><h4>Ubicación</h4>${renderBars(locationPieView, "label")}</div><div><h4>País</h4>${renderBars(countryPieView, "label")}</div></div>`,
+        { open: false },
+      ),
+      section("Análisis por ubicación", renderTable(data.tables?.locations || [], locationCols), { open: false }),
+    ];
 
     const html = `<!doctype html>
 <html lang="es">
@@ -818,113 +979,51 @@ export default function App() {
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: "Inter", "Segoe UI", Arial, sans-serif; color: #1f2937; background: #f7f5f2; }
-  .page { max-width: 1200px; margin: 0 auto; padding: 24px; }
-  .card { background: #fff; border: 1px solid #e6dfd7; border-radius: 14px; padding: 18px; margin-bottom: 16px; }
-  h1 { margin: 0 0 8px; font-size: 1.8rem; }
-  h2 { margin: 0 0 10px; font-size: 1.2rem; }
-  h3 { margin: 0 0 8px; font-size: 1rem; }
-  p { margin: 0; }
+  body { margin: 0; font-family: "Inter", "Segoe UI", Arial, sans-serif; color: #1f2937; background: #f5f1eb; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 22px; }
+  .header { background: #fff; border: 1px solid #e7ded4; border-radius: 16px; padding: 18px; margin-bottom: 12px; }
+  .header h1 { margin: 0 0 6px; font-size: 1.7rem; }
   .muted { color: #6b7280; }
-  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .chip { background: #eef2ff; color: #1e3a8a; border-radius: 999px; padding: 6px 10px; font-size: 0.82rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { background: #eef2ff; color: #1e3a8a; border-radius: 999px; padding: 6px 10px; font-size: 0.8rem; border: 1px solid #d9e2ff; }
+  .module { background: #fff; border: 1px solid #e7ded4; border-radius: 16px; margin-bottom: 10px; overflow: hidden; }
+  .module summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 16px; background: #faf7f3; }
+  .module summary::-webkit-details-marker { display: none; }
+  .summary-title { font-weight: 700; }
+  .summary-hint { color: #6b7280; font-size: 0.85rem; }
+  .module-body { padding: 14px 16px 16px; }
   .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-  .kpi { background: #faf7f3; border: 1px solid #ece3d9; border-radius: 12px; padding: 12px; }
-  .kpi .label { color: #6b7280; font-size: 0.82rem; }
-  .kpi .value { font-weight: 700; margin-top: 6px; font-size: 1.08rem; }
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .list { margin: 8px 0 0 18px; padding: 0; }
-  .list li { margin-bottom: 5px; }
+  .kpi { border: 1px solid #ece3d9; border-radius: 12px; background: #fcfaf7; padding: 10px; }
+  .kpi span { font-size: 0.82rem; color: #6b7280; display: block; }
+  .kpi strong { display: block; margin-top: 4px; font-size: 1.08rem; }
+  .kpi small { display: block; margin-top: 3px; color: #6b7280; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
   th, td { border-bottom: 1px solid #eee6dd; padding: 8px 6px; text-align: left; white-space: nowrap; }
-  th { color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.75rem; }
-  .dist-row { margin-bottom: 10px; }
-  .dist-row-head { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.9rem; }
-  .dist-track { height: 10px; border-radius: 999px; background: #eef1f5; overflow: hidden; }
-  .dist-fill { height: 100%; border-radius: 999px; }
+  th { color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.74rem; }
+  ul { margin: 8px 0 0 18px; padding: 0; }
+  li { margin-bottom: 4px; }
+  h4 { margin: 0 0 8px; }
+  .bar-row { margin-bottom: 10px; }
+  .bar-head { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px; }
+  .bar-track { background: #edf1f5; border-radius: 999px; height: 10px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; }
   @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
   <div class="page">
-    <section class="card">
+    <header class="header">
       <h1>Executive YoY BE Control</h1>
-      <p class="muted">Presentacion HTML estatica generada desde el estado actual de la aplicacion.</p>
-      <div class="meta">
+      <p class="muted">Presentación HTML estática exportada desde el dashboard.</p>
+      <div class="chips" style="margin-top:8px;">
         <span class="chip">Periodo: ${escapeHtml(data.meta?.periodLabel || data.meta?.pairLabel || "—")}</span>
         <span class="chip">Modo: ${escapeHtml((data.meta?.mode || "").toUpperCase())}</span>
         <span class="chip">Mes key: ${escapeHtml(data.meta?.monthKey || "—")}</span>
-        <span class="chip">Ubicacion filtro: ${escapeHtml(location || "all")}</span>
-        <span class="chip">Busqueda: ${escapeHtml(search || "(vacio)")}</span>
       </div>
-    </section>
-
-    <section class="card">
-      <h2>Comparativa principal</h2>
-      <div class="kpi-grid">
-        <div class="kpi"><div class="label">Facturacion ano anterior</div><div class="value">${escapeHtml(currency(summary.totalPrev))}</div></div>
-        <div class="kpi"><div class="label">Facturacion ano actual</div><div class="value">${escapeHtml(currency(summary.totalCurr))}</div></div>
-        <div class="kpi"><div class="label">Variacion absoluta</div><div class="value">${escapeHtml(currency(summary.totalVar))}</div></div>
-        <div class="kpi"><div class="label">Variacion %</div><div class="value">${escapeHtml(percent(summary.totalVarPct))}</div></div>
-        <div class="kpi"><div class="label">Alertas</div><div class="value">${escapeHtml(integer(summary.alertsCount))}</div></div>
-        <div class="kpi"><div class="label">Crecimientos</div><div class="value">${escapeHtml(integer(summary.growthCount))}</div></div>
-        <div class="kpi"><div class="label">Hoteles nuevos</div><div class="value">${escapeHtml(integer(summary.newCount))}</div></div>
-        <div class="kpi"><div class="label">Hoteles perdidos</div><div class="value">${escapeHtml(integer(summary.lostCount))}</div></div>
-      </div>
-    </section>
-
-    ${compare ? `
-    <section class="card">
-      <h2>Comparador de periodos</h2>
-      <p class="muted">${escapeHtml(compareMeta?.periodLabel || compareMeta?.pairLabel || "")}</p>
-      <div class="kpi-grid" style="margin-top:10px;">
-        <div class="kpi"><div class="label">Facturacion ano anterior</div><div class="value">${escapeHtml(currency(compare.totalPrev))}</div></div>
-        <div class="kpi"><div class="label">Facturacion ano actual</div><div class="value">${escapeHtml(currency(compare.totalCurr))}</div></div>
-        <div class="kpi"><div class="label">Variacion absoluta</div><div class="value">${escapeHtml(currency(compare.totalVar))}</div></div>
-        <div class="kpi"><div class="label">Variacion %</div><div class="value">${escapeHtml(percent(compare.totalVarPct))}</div></div>
-      </div>
-    </section>` : ""}
-
-    <section class="card">
-      <h2>Resumen inteligente</h2>
-      <p class="muted">Fuente: ${escapeHtml(data.aiSummary?.source === "gemini" ? "Gemini" : "Fallback heuristico")}</p>
-      <div class="two-col" style="margin-top:10px;">
-        <div>
-          <h3>Conclusiones</h3>
-          <ul class="list">${buildBulletList(data.aiSummary?.conclusions)}</ul>
-          <h3>Riesgos</h3>
-          <ul class="list">${buildBulletList(data.aiSummary?.risks)}</ul>
-        </div>
-        <div>
-          <h3>Observaciones</h3>
-          <ul class="list">${buildBulletList(data.aiSummary?.observations)}</ul>
-          <h3>Oportunidades</h3>
-          <ul class="list">${buildBulletList(data.aiSummary?.opportunities)}</ul>
-          <h3>Acciones sugeridas</h3>
-          <ul class="list">${buildBulletList(data.aiSummary?.actions)}</ul>
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Top tablas (hasta 60 filas por tabla)</h2>
-      <h3>Alertas</h3>
-      <div class="table-wrap"><table><thead><tr><th>Hotel</th><th>Code</th><th>Ubicacion</th><th>${escapeHtml(data.meta?.previousLabel || "Prev")}</th><th>${escapeHtml(data.meta?.latestLabel || "Curr")}</th><th>Variacion EUR</th><th>Variacion %</th></tr></thead><tbody>${buildTableRows(data.tables?.alerts)}</tbody></table></div>
-      <h3 style="margin-top:14px;">Crecimientos</h3>
-      <div class="table-wrap"><table><thead><tr><th>Hotel</th><th>Code</th><th>Ubicacion</th><th>${escapeHtml(data.meta?.previousLabel || "Prev")}</th><th>${escapeHtml(data.meta?.latestLabel || "Curr")}</th><th>Variacion EUR</th><th>Variacion %</th></tr></thead><tbody>${buildTableRows(data.tables?.growth)}</tbody></table></div>
-    </section>
-
-    <section class="card two-col">
-      <div>
-        <h2>Distribucion por ubicacion</h2>
-        ${buildDistRows(locationPieView)}
-      </div>
-      <div>
-        <h2>Distribucion por pais</h2>
-        ${buildDistRows(countryPieView)}
-      </div>
-    </section>
+    </header>
+    ${modules.join("\n")}
   </div>
 </body>
 </html>`;
