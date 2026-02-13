@@ -979,37 +979,169 @@ export default function App() {
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: "Inter", "Segoe UI", Arial, sans-serif; color: #1f2937; background: #f5f1eb; }
-  .page { max-width: 1260px; margin: 0 auto; padding: 22px; }
-  .header { background: #fff; border: 1px solid #e7ded4; border-radius: 16px; padding: 18px; margin-bottom: 12px; }
-  .header h1 { margin: 0 0 6px; font-size: 1.7rem; }
-  .muted { color: #6b7280; }
+  body {
+    margin: 0;
+    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    color: #1f2937;
+    background:
+      radial-gradient(1200px 600px at -10% -20%, rgba(81,107,166,0.22), transparent 55%),
+      radial-gradient(900px 500px at 110% 10%, rgba(15,107,110,0.18), transparent 50%),
+      linear-gradient(180deg, #f6f2ec 0%, #efe8dd 100%);
+  }
+  .page { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  .header {
+    background: linear-gradient(145deg, #ffffff 0%, #f9f5ef 100%);
+    border: 1px solid #e8dfd4;
+    border-radius: 20px;
+    padding: 22px;
+    margin-bottom: 14px;
+    box-shadow: 0 14px 34px rgba(31,41,55,0.08);
+    position: relative;
+    overflow: hidden;
+  }
+  .header::after {
+    content: "";
+    position: absolute;
+    right: -40px;
+    top: -40px;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(81,107,166,0.18) 0%, rgba(81,107,166,0) 70%);
+  }
+  .header h1 { margin: 0 0 6px; font-size: 1.95rem; letter-spacing: -0.02em; }
+  .muted { color: #64748b; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { background: #eef2ff; color: #1e3a8a; border-radius: 999px; padding: 6px 10px; font-size: 0.8rem; border: 1px solid #d9e2ff; }
-  .module { background: #fff; border: 1px solid #e7ded4; border-radius: 16px; margin-bottom: 10px; overflow: hidden; }
-  .module summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 16px; background: #faf7f3; }
+  .chip {
+    background: linear-gradient(180deg, #f1f5ff 0%, #e7eeff 100%);
+    color: #1e3a8a;
+    border-radius: 999px;
+    padding: 6px 11px;
+    font-size: 0.8rem;
+    border: 1px solid #d6e0fb;
+    font-weight: 600;
+  }
+  .hero-stats {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+  }
+  .hero-stat {
+    background: #ffffff;
+    border: 1px solid #e8dfd4;
+    border-radius: 12px;
+    padding: 10px;
+  }
+  .hero-stat span { display:block; font-size:0.76rem; color:#64748b; text-transform: uppercase; letter-spacing: .04em; }
+  .hero-stat strong { display:block; margin-top:4px; font-size:1.05rem; }
+
+  .module {
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(4px);
+    border: 1px solid #e7ded4;
+    border-radius: 18px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 20px rgba(31,41,55,0.05);
+  }
+  .module[open] { box-shadow: 0 14px 30px rgba(31,41,55,0.08); }
+  .module summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: linear-gradient(180deg, #fbf9f6 0%, #f6f0e8 100%);
+    border-bottom: 1px solid #ece3d9;
+  }
   .module summary::-webkit-details-marker { display: none; }
-  .summary-title { font-weight: 700; }
-  .summary-hint { color: #6b7280; font-size: 0.85rem; }
-  .module-body { padding: 14px 16px 16px; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-  .kpi { border: 1px solid #ece3d9; border-radius: 12px; background: #fcfaf7; padding: 10px; }
-  .kpi span { font-size: 0.82rem; color: #6b7280; display: block; }
-  .kpi strong { display: block; margin-top: 4px; font-size: 1.08rem; }
-  .kpi small { display: block; margin-top: 3px; color: #6b7280; }
+  .summary-title {
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    position: relative;
+    padding-left: 14px;
+  }
+  .summary-title::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 6px;
+    height: 18px;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #516BA6 0%, #0F6B6E 100%);
+  }
+  .summary-hint { color: #6b7280; font-size: 0.84rem; }
+  .module summary::after {
+    content: "▾";
+    color: #516BA6;
+    font-weight: 700;
+    transition: transform .2s ease;
+  }
+  .module[open] summary::after { transform: rotate(180deg); }
+  .module-body { padding: 16px; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 10px; }
+  .kpi {
+    border: 1px solid #ece3d9;
+    border-radius: 14px;
+    background: linear-gradient(160deg, #ffffff 0%, #f9f4ee 100%);
+    padding: 11px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+  }
+  .kpi span { font-size: 0.78rem; color: #64748b; display: block; text-transform: uppercase; letter-spacing: .04em; }
+  .kpi strong { display: block; margin-top: 5px; font-size: 1.12rem; color: #111827; }
+  .kpi small { display: block; margin-top: 3px; color: #64748b; }
+
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .table-wrap { overflow-x: auto; }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid #ece3d9;
+    border-radius: 12px;
+    background: #fff;
+  }
   table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-  th, td { border-bottom: 1px solid #eee6dd; padding: 8px 6px; text-align: left; white-space: nowrap; }
-  th { color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.74rem; }
+  th, td { border-bottom: 1px solid #f0e8df; padding: 9px 8px; text-align: left; white-space: nowrap; }
+  th {
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.72rem;
+    background: #f9f6f2;
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:nth-child(even) { background: #fcfaf7; }
+  tbody tr:hover { background: #f2f6ff; }
+
   ul { margin: 8px 0 0 18px; padding: 0; }
-  li { margin-bottom: 4px; }
-  h4 { margin: 0 0 8px; }
+  li { margin-bottom: 5px; }
+  h4 { margin: 0 0 8px; font-size: 0.96rem; color: #0f172a; }
+
   .bar-row { margin-bottom: 10px; }
-  .bar-head { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px; }
-  .bar-track { background: #edf1f5; border-radius: 999px; height: 10px; overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 999px; }
-  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+  .bar-head { display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 4px; }
+  .bar-track {
+    background: #edf1f5;
+    border-radius: 999px;
+    height: 11px;
+    overflow: hidden;
+    border: 1px solid #dbe4ef;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.12);
+  }
+
+  @media (max-width: 900px) {
+    .two-col { grid-template-columns: 1fr; }
+    .page { padding: 14px; }
+    .header { padding: 16px; }
+    .header h1 { font-size: 1.55rem; }
+  }
 </style>
 </head>
 <body>
@@ -1021,6 +1153,12 @@ export default function App() {
         <span class="chip">Periodo: ${escapeHtml(data.meta?.periodLabel || data.meta?.pairLabel || "—")}</span>
         <span class="chip">Modo: ${escapeHtml((data.meta?.mode || "").toUpperCase())}</span>
         <span class="chip">Mes key: ${escapeHtml(data.meta?.monthKey || "—")}</span>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><span>Facturación actual</span><strong>${escapeHtml(currency(summary.totalCurr))}</strong></div>
+        <div class="hero-stat"><span>Variación YoY</span><strong>${escapeHtml(percent(summary.totalVarPct))}</strong></div>
+        <div class="hero-stat"><span>Alertas</span><strong>${escapeHtml(integer(summary.alertsCount))}</strong></div>
+        <div class="hero-stat"><span>Crecimientos</span><strong>${escapeHtml(integer(summary.growthCount))}</strong></div>
       </div>
     </header>
     ${modules.join("\n")}
